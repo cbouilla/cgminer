@@ -783,29 +783,8 @@ static struct cgpu_info *bmsc_detect_one(struct libusb_device *dev, struct usb_f
 	const char golden_ob[] =
 		"4679ba4ec99876bf4bfe086082b40025"
 		"4df6c356451471139a3afa71e48f544a"
-		"00000000000000004000000000000000"
+		"00000000000000000000000000000000"
 		"0000001f87320b1a1426674f2fa722ce";
-	const char golden_ob1[] =
-		"e1eb393a50f6ae97e306ea87c1c47eae"
-		"1f9ad02d729d9f86bd48a213a4600144"
-		"00000000000000004000000000000000"
-		"0000001ffb0b0719aaf19752dd5e83a4";
-	const char golden_ob2[] =
-		"b65911ea2c4b0c52958cb408caebff32"
-		"8dece4e6a002fe2693ba9906ffde7e8a"
-		"00000000000000004000000000000000"
-		"0000001f20dc1c190642455201756658";
-	const char golden_ob3[] =
-		"c99da189374bcc69a1134d6f4953addc"
-		"7420499b132b7f8f999b0c71fe7efbf2"
-		"00000000000000004000000000000000"
-		"0000001f20dc1c198e4145526d74dee3";
-	const char golden_ob4[] =
-		"696af96144b6079c1b437fbc6e539e4d"
-		"996d25b027ea9eefdfaf4eff6add6986"
-		"00000000000000004000000000000000"
-		"0000001f20dc1c19f84e4552ac86dc14";
-
 	char bandops_ob[] =
 		"00000000000000000000000000000000"
 		"00000000000000000000000000000000"
@@ -813,10 +792,6 @@ static struct cgpu_info *bmsc_detect_one(struct libusb_device *dev, struct usb_f
 		"00000000000000000000000000000000";
 
 	const char golden_nonce[] = "000187a2";
-	const char golden_nonce1[] = "0345182b";
-	const char golden_nonce2[] = "466b30a5";
-	const char golden_nonce3[] = "857e65ee";
-	const char golden_nonce4[] = "c6f70284";
 	const uint32_t golden_nonce_val = 0x000187a2;
 	unsigned char nonce_bin[BMSC_READ_SIZE];
 	struct BMSC_WORK workdata;
@@ -1195,7 +1170,6 @@ cmr2_retry:
 		cgsleep_ms(1000);
 
 		applog(LOG_ERR, "-----------------start nonce------------------");
-#if 0
 		applog(LOG_ERR, "Bmsc send golden nonce");
 
 		hex2bin((void *)(&workdata), golden_ob, sizeof(workdata));
@@ -1220,120 +1194,6 @@ cmr2_retry:
 					bmsc->device_path, nonce_hex, golden_nonce);
 			}
 		}
-		
-		applog(LOG_ERR, "Bmsc recv golden nonce %s -- %s ", nonce_hex, golden_nonce);
-#else
-		applog(LOG_ERR, "Bmsc send golden nonce1");
-		hex2bin((void *)(&workdata), golden_ob1, sizeof(workdata));
-		err = usb_write_ii(bmsc, info->intinfo, (char *)(&workdata), sizeof(workdata), &amount, C_SENDWORK);
-		if (err != LIBUSB_SUCCESS || amount != sizeof(workdata))
-			continue;
-
-		memset(nonce_bin, 0, sizeof(nonce_bin));
-		ret = bmsc_get_nonce(bmsc, nonce_bin, &tv_start, &tv_finish, NULL, 500);
-		if (ret != BTM_NONCE_OK) {
-			applog(LOG_ERR, "Bmsc recv golden nonce timeout");
-			continue;
-		}
-
-		nonce_hex = bin2hex(nonce_bin, sizeof(nonce_bin));
-		if (strncmp(nonce_hex, golden_nonce1, 8) == 0)
-			ok = true;		
-		else {
-			applog(LOG_ERR, "Bmsc recv golden nonce %s != %s and retry", nonce_hex, golden_nonce1);
-			applog(LOG_ERR,"The first chip may not work,reconnrect the device will get better stats");
-			cgsleep_ms(1000);
-			if (tries < 0 && info->ident != IDENT_CMR2) {
-				applog(LOG_ERR, "Bmsc Detect: Test failed at %s: get %s, should: %s",
-					bmsc->device_path, nonce_hex, golden_nonce1);
-			}
-		}
-		applog(LOG_ERR, "Bmsc recv golden nonce1 %s -- %s ", nonce_hex, golden_nonce1);
-
-		applog(LOG_ERR, "Bmsc send golden nonce2");
-
-		hex2bin((void *)(&workdata), golden_ob2, sizeof(workdata));
-		err = usb_write_ii(bmsc, info->intinfo, (char *)(&workdata), sizeof(workdata), &amount, C_SENDWORK);
-		if (err != LIBUSB_SUCCESS || amount != sizeof(workdata))
-			continue;
-
-		memset(nonce_bin, 0, sizeof(nonce_bin));
-		ret = bmsc_get_nonce(bmsc, nonce_bin, &tv_start, &tv_finish, NULL, 500);
-		if (ret != BTM_NONCE_OK) {
-			applog(LOG_ERR, "Bmsc recv golden nonce timeout");
-			continue;
-		}
-
-		nonce_hex = bin2hex(nonce_bin, sizeof(nonce_bin));
-		if (strncmp(nonce_hex, golden_nonce2, 8) == 0)
-			ok = true;		
-		else {
-			applog(LOG_ERR, "Bmsc recv golden nonce %s != %s and retry", nonce_hex, golden_nonce2);
-			applog(LOG_ERR,"The second chip may not work,reconnrect the device will get better stats");
-			cgsleep_ms(1000);
-			if (tries < 0 && info->ident != IDENT_CMR2) {
-				applog(LOG_ERR, "Bmsc Detect: Test failed at %s: get %s, should: %s",
-					bmsc->device_path, nonce_hex, golden_nonce2);
-			}
-		}
-		applog(LOG_ERR, "Bmsc recv golden nonce2 %s -- %s ", nonce_hex, golden_nonce2);
-		applog(LOG_ERR, "Bmsc send golden nonce3");
-		hex2bin((void *)(&workdata), golden_ob3, sizeof(workdata));
-		err = usb_write_ii(bmsc, info->intinfo, (char *)(&workdata), sizeof(workdata), &amount, C_SENDWORK);
-		if (err != LIBUSB_SUCCESS || amount != sizeof(workdata))
-			continue;
-
-		memset(nonce_bin, 0, sizeof(nonce_bin));
-		ret = bmsc_get_nonce(bmsc, nonce_bin, &tv_start, &tv_finish, NULL, 500);
-		if (ret != BTM_NONCE_OK) {
-			applog(LOG_ERR, "Bmsc recv golden nonce timeout");
-			continue;
-		}
-
-		nonce_hex = bin2hex(nonce_bin, sizeof(nonce_bin));
-		if (strncmp(nonce_hex, golden_nonce3, 8) == 0)
-			ok = true;		
-		else {
-			applog(LOG_ERR, "Bmsc recv golden nonce %s != %s and retry", nonce_hex, golden_nonce3);
-			applog(LOG_ERR,"The third chip may not work,reconnrect the device will get better stats");
-			cgsleep_ms(1000);
-			if (tries < 0 && info->ident != IDENT_CMR2) {
-				applog(LOG_ERR, "Bmsc Detect: Test failed at %s: get %s, should: %s",
-					bmsc->device_path, nonce_hex, golden_nonce3);
-			}
-		}
-		
-		applog(LOG_ERR, "Bmsc recv golden nonce %s -- %s ", nonce_hex, golden_nonce3);		
-		applog(LOG_ERR, "Bmsc send golden nonce4");
-
-		hex2bin((void *)(&workdata), golden_ob4, sizeof(workdata));
-		err = usb_write_ii(bmsc, info->intinfo, (char *)(&workdata), sizeof(workdata), &amount, C_SENDWORK);
-		if (err != LIBUSB_SUCCESS || amount != sizeof(workdata))
-			continue;
-
-		memset(nonce_bin, 0, sizeof(nonce_bin));
-		ret = bmsc_get_nonce(bmsc, nonce_bin, &tv_start, &tv_finish, NULL, 500);
-		if (ret != BTM_NONCE_OK) {
-			applog(LOG_ERR, "Bmsc recv golden nonce4 timeout");
-			continue;
-		}
-
-		nonce_hex = bin2hex(nonce_bin, sizeof(nonce_bin));
-		if (strncmp(nonce_hex, golden_nonce4, 8) == 0)
-			ok = true;
-		
-		else {
-			applog(LOG_ERR, "Bmsc recv golden nonce %s != %s and retry", nonce_hex, golden_nonce4);
-			applog(LOG_ERR,"The fourth chip may not work,reconnrect the device will get better stats");
-			cgsleep_ms(1000);
-			if (tries < 0 && info->ident != IDENT_CMR2) {
-				applog(LOG_ERR, "Bmsc Detect: Test failed at %s: get %s, should: %s",
-					bmsc->device_path, nonce_hex, golden_nonce4);
-			}
-		}
-		
-		applog(LOG_ERR, "Bmsc recv golden nonce %s -- %s ", nonce_hex, golden_nonce4);
-#endif
 		free(nonce_hex);
 	}
 
@@ -1562,7 +1422,6 @@ static int64_t bmsc_scanwork(struct thr_info *thr)
 
 	elapsed.tv_sec = elapsed.tv_usec = 0;
 
-retry:
 	work = get_work(thr, thr->id);
 	memset((void *)(&workdata), 0, sizeof(workdata));
 	memcpy(&(workdata.midstate), work->midstate, BMSC_MIDSTATE_SIZE);
@@ -1570,8 +1429,6 @@ retry:
 	rev((void *)(&(workdata.midstate)), BMSC_MIDSTATE_SIZE);
 	rev((void *)(&(workdata.work)), BMSC_WORK_SIZE);
 
-	if(work->midstate[BMSC_MIDSTATE_SIZE-1] == 0xaa)
-		goto retry;
 	workdata.workid = work->id;
 	workid = work->id;
 	workid = workid & 0x1F;

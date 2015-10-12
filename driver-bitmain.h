@@ -140,7 +140,8 @@ struct bitmain_txconfig_token {
 	uint8_t beeper_ctrl          :1;
 	uint8_t temp_over_ctrl       :1;
 	uint8_t fan_home_mode        :1;
-	uint8_t reserved1            :5;
+	uint8_t use_vil              :1;
+	uint8_t reserved1            :4;
 	uint8_t chain_check_time;
 	uint8_t reserved2;
 

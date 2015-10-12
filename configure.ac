@@ -1,7 +1,7 @@
 ##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 ##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 m4_define([v_maj], [4])
-m4_define([v_min], [9])
+m4_define([v_min], [8])
 m4_define([v_mic], [0])
 ##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 m4_define([v_ver], [v_maj.v_min.v_mic])
@@ -151,6 +151,7 @@ if test "x$bitmain" = xyes; then
 fi
 AM_CONDITIONAL([HAS_BITMAIN], [test x$bitmain = xyes])
 
+
 avalon="no"
 
 AC_ARG_ENABLE([avalon],
@@ -175,18 +176,6 @@ if test "x$avalon2" = xyes; then
 	drivercount=x$drivercount
 fi
 AM_CONDITIONAL([HAS_AVALON2], [test x$avalon2 = xyes])
-
-
-avalon4="no"
-
-AC_ARG_ENABLE([avalon4],
-	[AC_HELP_STRING([--enable-avalon4],[Compile support for Avalon4 (default disabled)])],
-	[avalon4=$enableval]
-	)
-if test "x$avalon4" = xyes; then
-	AC_DEFINE([USE_AVALON4], [1], [Defined to 1 if Avalon4 support is wanted])
-fi
-AM_CONDITIONAL([HAS_AVALON4], [test x$avalon4 = xyes])
 
 
 bab="no"
@@ -453,7 +442,7 @@ fi
 
 
 #Add a new device to this list if it needs libusb, along with a no on the end.
-if test x$avalon$avalon2$avalon4$bitforce$bitfury$blockerupter$modminer$bflsc$icarus$hashfast$hashratio$klondike$drillbit$cointerra$bmsc$bitmain != xnononononononononononononononono; then
+if test x$avalon$avalon2$bitforce$bitfury$blockerupter$modminer$bflsc$icarus$hashfast$hashratio$klondike$drillbit$cointerra$bmsc$bitmain != xnonononononononononononononono; then
 	want_usbutils=true
 else
 	want_usbutils=false
@@ -465,7 +454,7 @@ else
 	want_libbitfury=false
 fi
 
-if test x$avalon2$avalon4$hashratio != xnonono; then
+if test x$avalon2$hashratio != xnono; then
 	want_crc16=true
 else
 	want_crc16=false
@@ -669,12 +658,6 @@ if test "x$avalon2" = xyes; then
 	echo "  Avalon2.ASICs........: Enabled"
 else
 	echo "  Avalon2.ASICs........: Disabled"
-fi
-
-if test "x$avalon4" = xyes; then
-	echo "  Avalon4.ASICs........: Enabled"
-else
-	echo "  Avalon4.ASICs........: Disabled"
 fi
 
 if test "x$minion" = xyes; then

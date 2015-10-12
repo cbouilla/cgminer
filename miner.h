@@ -252,7 +252,6 @@ extern unsigned char bit_swap_table[256];
 	DRIVER_ADD_COMMAND(bmsc) \
 	DRIVER_ADD_COMMAND(avalon) \
 	DRIVER_ADD_COMMAND(avalon2) \
-	DRIVER_ADD_COMMAND(avalon4) \
 	DRIVER_ADD_COMMAND(bflsc) \
 	DRIVER_ADD_COMMAND(bitfury) \
 	DRIVER_ADD_COMMAND(blockerupter) \
@@ -455,7 +454,6 @@ struct cgpu_info {
 	struct cg_usb_device *usbdev;
 	struct cg_usb_info usbinfo;
 	bool blacklisted;
-	bool nozlp; // Device prefers no zero length packet
 #endif
 #if defined(USE_AVALON) || defined(USE_AVALON2)
 	struct work **works;
@@ -1067,6 +1065,7 @@ extern bool opt_bitmain_checkn2diff;
 extern bool opt_bitmain_nobeeper;
 extern bool opt_bitmain_notempoverctrl;
 extern bool opt_bitmain_homemode;
+extern bool opt_bitmain_new_cmd_type_vil;
 #endif
 #ifdef USE_BMSC
 extern char *opt_bmsc_options;
@@ -1154,9 +1153,9 @@ extern pthread_cond_t restart_cond;
 extern void clear_stratum_shares(struct pool *pool);
 extern void clear_pool_work(struct pool *pool);
 extern void set_target(unsigned char *dest_target, double diff);
-#if defined (USE_AVALON2) || defined (USE_AVALON4) || defined (USE_HASHRATIO)
+#if defined (USE_AVALON2) || defined (USE_HASHRATIO)
 bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *real_pool,
-			 uint32_t nonce2, uint32_t nonce, uint32_t ntime);
+			 uint32_t nonce2, uint32_t nonce);
 #endif
 extern int restart_wait(struct thr_info *thr, unsigned int mstime);
 

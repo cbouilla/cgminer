@@ -74,7 +74,7 @@ char *set_hashratio_freq(char *arg)
 	
 	if (val < HRTO_DEFAULT_FREQUENCY_MIN || val > HRTO_DEFAULT_FREQUENCY_MAX)
 		return "Invalid value passed to hashratio-freq";
-
+	
 	hashratio_freq = val;
 	
 	return NULL;
@@ -215,7 +215,7 @@ static int decode_pkg(struct thr_info *thr, struct hashratio_ret *ar, uint8_t *p
 					break;
 				}
 			}
-			submit_nonce2_nonce(thr, pool, real_pool, nonce2, nonce, 0);
+			submit_nonce2_nonce(thr, pool, real_pool, nonce2, nonce);
 			break;
 		case HRTO_P_STATUS:
 			applog(LOG_DEBUG, "Hashratio: HRTO_P_STATUS");

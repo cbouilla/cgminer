@@ -72,10 +72,6 @@ char *curly = ":D";
 #include "driver-avalon2.h"
 #endif
 
-#ifdef USE_AVALON4
-#include "driver-avalon4.h"
-#endif
-
 #ifdef USE_BFLSC
 #include "driver-bflsc.h"
 #endif
@@ -246,11 +242,6 @@ static char *opt_set_avalon_freq;
 static char *opt_set_avalon2_freq;
 static char *opt_set_avalon2_fan;
 static char *opt_set_avalon2_voltage;
-#endif
-#ifdef USE_AVALON4
-static char *opt_set_avalon4_fan;
-static char *opt_set_avalon4_voltage;
-static char *opt_set_avalon4_freq;
 #endif
 #ifdef USE_BLOCKERUPTER
 int opt_bet_clk = 0;
@@ -812,16 +803,6 @@ static char *set_int_32_to_63(const char *arg, int *i)
 	return set_int_range(arg, i, 32, 63);
 }
 
-static char *set_int_22_to_55(const char *arg, int *i)
-{
-	return set_int_range(arg, i, 22, 55);
-}
-
-static char *set_int_42_to_65(const char *arg, int *i)
-{
-	return set_int_range(arg, i, 42, 62);
-}
-
 static char *set_int_1_to_10(const char *arg, int *i)
 {
 	return set_int_range(arg, i, 1, 10);
@@ -1358,38 +1339,6 @@ static struct opt_table opt_config_table[] = {
 		     set_int_1_to_65535, opt_show_intval, &opt_avalon2_polling_delay,
 		     "Set Avalon2 polling delay value (ms)"),
 #endif
-#ifdef USE_AVALON4
-	OPT_WITHOUT_ARG("--avalon4-automatic-voltage",
-			opt_set_bool, &opt_avalon4_autov,
-			"Automatic adjust voltage base on module DH"),
-	OPT_WITH_CBARG("--avalon4-voltage",
-		     set_avalon4_voltage, NULL, &opt_set_avalon4_voltage,
-		     "Set Avalon4 core voltage, in millivolts, step: 125"),
-	OPT_WITH_CBARG("--avalon4-freq",
-		     set_avalon4_freq, NULL, &opt_set_avalon4_freq,
-		     "Set frequency for Avalon4, 1 to 3 values, example: 445:385:370"),
-	OPT_WITH_CBARG("--avalon4-fan",
-		     set_avalon4_fan, NULL, &opt_set_avalon4_fan,
-		     "Set Avalon4 target fan speed range"),
-	OPT_WITH_ARG("--avalon4-temp",
-		     set_int_22_to_55, opt_show_intval, &opt_avalon4_temp_target,
-		     "Set Avalon4 target temperature"),
-	OPT_WITH_ARG("--avalon4-cutoff",
-		     set_int_42_to_65, opt_show_intval, &opt_avalon4_overheat,
-		     "Set Avalon4 overheat cut off temperature"),
-	OPT_WITH_ARG("--avalon4-polling-delay",
-		     set_int_1_to_65535, opt_show_intval, &opt_avalon4_polling_delay,
-		     "Set Avalon4 polling delay value (ms)"),
-	OPT_WITH_ARG("--avalon4-ntime-offset",
-		     opt_set_intval, opt_show_intval, &opt_avalon4_ntime_offset,
-		     "Set Avalon4 MM ntime rolling max offset"),
-	OPT_WITH_ARG("--avalon4-aucspeed",
-		     opt_set_intval, opt_show_intval, &opt_avalon4_aucspeed,
-		     "Set Avalon4 AUC IIC bus speed"),
-	OPT_WITH_ARG("--avalon4-aucxdelay",
-		     opt_set_intval, opt_show_intval, &opt_avalon4_aucxdelay,
-		     "Set Avalon4 AUC IIC xfer read delay, 4800 ~= 1ms"),
-#endif
 #ifdef USE_BAB
 	OPT_WITH_ARG("--bab-options",
 		     opt_set_charp, NULL, &opt_bab_options,
@@ -1482,6 +1431,9 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITHOUT_ARG("--bitmain-homemode",
 			opt_set_bool, &opt_bitmain_homemode,
 			"Set bitmain miner to home mode"),
+	OPT_WITHOUT_ARG("--bitmain-use-vil",
+			opt_set_bool, &opt_bitmain_new_cmd_type_vil,
+			"Set bitmain miner use vil mode"),
 	OPT_WITH_ARG("--bitmain-cutoff",
 		     set_int_0_to_100, opt_show_intval, &opt_bitmain_overheat,
 		     "Set bitmain overheat cut off temperature"),
@@ -2017,9 +1969,6 @@ static char *opt_verusage_and_exit(const char *extra)
 #endif
 #ifdef USE_AVALON2
 		"avalon2 "
-#endif
-#ifdef USE_AVALON4
-		"avalon4 "
 #endif
 #ifdef USE_BFLSC
 		"bflsc "
@@ -5340,9 +5289,7 @@ void write_config(FILE *fcfg)
 			     (void *)opt->cb_arg == (void *)set_int_0_to_255 ||
 			     (void *)opt->cb_arg == (void *)set_int_0_to_200 ||
 			     (void *)opt->cb_arg == (void *)set_int_0_to_4 ||
-			     (void *)opt->cb_arg == (void *)set_int_32_to_63 ||
-			     (void *)opt->cb_arg == (void *)set_int_22_to_55 ||
-			     (void *)opt->cb_arg == (void *)set_int_42_to_65)) {
+			     (void *)opt->cb_arg == (void *)set_int_32_to_63)) {
 				fprintf(fcfg, ",\n\"%s\" : \"%d\"", p+2, *(int *)opt->u.arg);
 				continue;
 			}
@@ -7223,9 +7170,9 @@ void set_target(unsigned char *dest_target, double diff)
 	memcpy(dest_target, target, 32);
 }
 
-#if defined (USE_AVALON2) || defined (USE_AVALON4) || defined (USE_HASHRATIO)
+#if defined (USE_AVALON2) || defined (USE_HASHRATIO)
 bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *real_pool,
-			 uint32_t nonce2, uint32_t nonce,  uint32_t ntime)
+			 uint32_t nonce2, uint32_t nonce)
 {
 	const int thr_id = thr->id;
 	struct cgpu_info *cgpu = thr->cgpu;
@@ -7238,10 +7185,6 @@ bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *r
 	cg_wunlock(&pool->data_lock);
 
 	gen_stratum_work(pool, work);
-	while (ntime--) {
-		roll_work(work);
-	}
-
 	work->pool = real_pool;
 
 	work->thr_id = thr_id;
@@ -7604,7 +7547,7 @@ static void submit_work_async(struct work *work)
 
 void inc_hw_errors(struct thr_info *thr)
 {
-	applog(LOG_INFO, "%s %d: invalid nonce - HW error", thr->cgpu->drv->name,
+	applog(LOG_ERR, "%s%d: invalid nonce - HW error", thr->cgpu->drv->name,
 	       thr->cgpu->device_id);
 
 	mutex_lock(&stats_lock);
@@ -8918,14 +8861,16 @@ static void *watchdog_thread(void __maybe_unused *userdata)
 			struct thr_info *thr = cgpu->thr[0];
 			enum dev_enable *denable;
 			char dev_str[8];
+			int gpu;
 
 			if (!thr)
 				continue;
 
 			cgpu->drv->get_stats(cgpu);
 
+			gpu = cgpu->device_id;
 			denable = &cgpu->deven;
-			snprintf(dev_str, sizeof(dev_str), "%s %d", cgpu->drv->name, cgpu->device_id);
+			snprintf(dev_str, sizeof(dev_str), "%s%d", cgpu->drv->name, gpu);
 
 			/* Thread is waiting on getwork or disabled */
 			if (thr->getwork || *denable == DEV_DISABLED)
