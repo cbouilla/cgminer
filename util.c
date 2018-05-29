@@ -16,27 +16,19 @@
 #include <stdarg.h>
 #include <string.h>
 #include <jansson.h>
-#ifdef HAVE_LIBCURL
-#include <curl/curl.h>
-#endif
+
 #include <time.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
-#ifndef WIN32
+
 #include <fcntl.h>
-# ifdef __linux
-#  include <sys/prctl.h>
-# endif
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <netinet/tcp.h>
-# include <netdb.h>
-#else
-# include <winsock2.h>
-# include <ws2tcpip.h>
-# include <mmsystem.h>
-#endif
+#include <sys/prctl.h>
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netdb.h>
 #include <sched.h>
 
 #include "miner.h"
@@ -94,705 +86,35 @@ unsigned char bit_swap_table[256] =
 static void keep_sockalive(SOCKETTYPE fd)
 {
 	const int tcp_one = 1;
-#ifndef WIN32
 	const int tcp_keepidle = 45;
 	const int tcp_keepintvl = 30;
 	int flags = fcntl(fd, F_GETFL, 0);
 
 	fcntl(fd, F_SETFL, O_NONBLOCK | flags);
-#else
-	u_long flags = 1;
-
-	ioctlsocket(fd, FIONBIO, &flags);
-#endif
 
 	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (const void *)&tcp_one, sizeof(tcp_one));
 	if (!opt_delaynet)
-#ifndef __linux
-		setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (const void *)&tcp_one, sizeof(tcp_one));
-#else /* __linux */
+/* __linux */
 	fcntl(fd, F_SETFD, FD_CLOEXEC);
 		setsockopt(fd, SOL_TCP, TCP_NODELAY, (const void *)&tcp_one, sizeof(tcp_one));
 	setsockopt(fd, SOL_TCP, TCP_KEEPCNT, &tcp_one, sizeof(tcp_one));
 	setsockopt(fd, SOL_TCP, TCP_KEEPIDLE, &tcp_keepidle, sizeof(tcp_keepidle));
 	setsockopt(fd, SOL_TCP, TCP_KEEPINTVL, &tcp_keepintvl, sizeof(tcp_keepintvl));
-#endif /* __linux */
-
-#ifdef __APPLE_CC__
-	setsockopt(fd, IPPROTO_TCP, TCP_KEEPALIVE, &tcp_keepintvl, sizeof(tcp_keepintvl));
-#endif /* __APPLE_CC__ */
-
 }
 
-#ifdef WIN32
-/* Generic versions of inet_pton for windows, using different names in case
- * it is implemented in ming in the future. */
-#define W32NS_INADDRSZ  4
-#define W32NS_IN6ADDRSZ 16
-#define W32NS_INT16SZ   2
-
-static int Inet_Pton4(const char *src, char *dst)
-{
-	uint8_t tmp[W32NS_INADDRSZ], *tp;
-
-	int saw_digit = 0;
-	int octets = 0;
-	*(tp = tmp) = 0;
-
-	int ch;
-	while ((ch = *src++) != '\0')
-	{
-		if (ch >= '0' && ch <= '9')
-		{
-			uint32_t n = *tp * 10 + (ch - '0');
-
-			if (saw_digit && *tp == 0)
-				return 0;
-
-			if (n > 255)
-				return 0;
-
-			*tp = n;
-			if (!saw_digit)
-			{
-				if (++octets > 4)
-					return 0;
-				saw_digit = 1;
-			}
-		}
-		else if (ch == '.' && saw_digit)
-		{
-			if (octets == 4)
-				return 0;
-			*++tp = 0;
-			saw_digit = 0;
-		}
-		else
-			return 0;
-	}
-	if (octets < 4)
-		return 0;
-
-	memcpy(dst, tmp, W32NS_INADDRSZ);
-
-	return 1;
-}
-
-static int Inet_Pton6(const char *src, char *dst)
-{
-	static const char xdigits[] = "0123456789abcdef";
-	uint8_t tmp[W32NS_IN6ADDRSZ];
-
-	uint8_t *tp = (uint8_t*) memset(tmp, '\0', W32NS_IN6ADDRSZ);
-	uint8_t *endp = tp + W32NS_IN6ADDRSZ;
-	uint8_t *colonp = NULL;
-
-	/* Leading :: requires some special handling. */
-	if (*src == ':')
-	{
-		if (*++src != ':')
-			return 0;
-	}
-
-	const char *curtok = src;
-	int saw_xdigit = 0;
-	uint32_t val = 0;
-	int ch;
-	while ((ch = tolower(*src++)) != '\0')
-	{
-		const char *pch = strchr(xdigits, ch);
-		if (pch != NULL)
-		{
-			val <<= 4;
-			val |= (pch - xdigits);
-			if (val > 0xffff)
-				return 0;
-			saw_xdigit = 1;
-			continue;
-		}
-		if (ch == ':')
-		{
-			curtok = src;
-			if (!saw_xdigit)
-			{
-				if (colonp)
-					return 0;
-				colonp = tp;
-				continue;
-			}
-			else if (*src == '\0')
-			{
-				return 0;
-			}
-			if (tp + W32NS_INT16SZ > endp)
-				return 0;
-			*tp++ = (uint8_t) (val >> 8) & 0xff;
-			*tp++ = (uint8_t) val & 0xff;
-			saw_xdigit = 0;
-			val = 0;
-			continue;
-		}
-		if (ch == '.' && ((tp + W32NS_INADDRSZ) <= endp) &&
-			Inet_Pton4(curtok, (char*) tp) > 0)
-		{
-			tp += W32NS_INADDRSZ;
-			saw_xdigit = 0;
-			break; /* '\0' was seen by inet_pton4(). */
-		}
-		return 0;
-	}
-	if (saw_xdigit)
-	{
-		if (tp + W32NS_INT16SZ > endp)
-			return 0;
-		*tp++ = (uint8_t) (val >> 8) & 0xff;
-		*tp++ = (uint8_t) val & 0xff;
-	}
-	if (colonp != NULL)
-	{
-		int i;
-		/*
-			* Since some memmove()'s erroneously fail to handle
-			* overlapping regions, we'll do the shift by hand.
-			*/
-		const int n = tp - colonp;
-
-		if (tp == endp)
-			return 0;
-
-		for (i = 1; i <= n; i++)
-		{
-			endp[-i] = colonp[n - i];
-			colonp[n - i] = 0;
-		}
-		tp = endp;
-	}
-	if (tp != endp)
-		return 0;
-
-	memcpy(dst, tmp, W32NS_IN6ADDRSZ);
-
-	return 1;
-}
-
-int Inet_Pton(int af, const char *src, void *dst)
-{
-	switch (af)
-	{
-		case AF_INET:
-			return Inet_Pton4(src, dst);
-		case AF_INET6:
-			return Inet_Pton6(src, dst);
-		default:
-			return -1;
-	}
-}
-#endif
 
 struct tq_ent {
 	void			*data;
 	struct list_head	q_node;
 };
 
-#ifdef HAVE_LIBCURL
-struct timeval nettime;
-
-struct data_buffer {
-	void		*buf;
-	size_t		len;
-};
-
-struct upload_buffer {
-	const void	*buf;
-	size_t		len;
-};
-
-struct header_info {
-	char		*lp_path;
-	int		rolltime;
-	char		*reason;
-	char		*stratum_url;
-	bool		hadrolltime;
-	bool		canroll;
-	bool		hadexpire;
-};
-
-static void databuf_free(struct data_buffer *db)
-{
-	if (!db)
-		return;
-
-	free(db->buf);
-
-	memset(db, 0, sizeof(*db));
-}
-
-static size_t all_data_cb(const void *ptr, size_t size, size_t nmemb,
-			  void *user_data)
-{
-	struct data_buffer *db = user_data;
-	size_t len = size * nmemb;
-	size_t oldlen, newlen;
-	void *newmem;
-	static const unsigned char zero = 0;
-
-	oldlen = db->len;
-	newlen = oldlen + len;
-
-	newmem = realloc(db->buf, newlen + 1);
-	if (!newmem)
-		return 0;
-
-	db->buf = newmem;
-	db->len = newlen;
-	memcpy(db->buf + oldlen, ptr, len);
-	memcpy(db->buf + newlen, &zero, 1);	/* null terminate */
-
-	return len;
-}
-
-static size_t upload_data_cb(void *ptr, size_t size, size_t nmemb,
-			     void *user_data)
-{
-	struct upload_buffer *ub = user_data;
-	unsigned int len = size * nmemb;
-
-	if (len > ub->len)
-		len = ub->len;
-
-	if (len) {
-		memcpy(ptr, ub->buf, len);
-		ub->buf += len;
-		ub->len -= len;
-	}
-
-	return len;
-}
-
-static size_t resp_hdr_cb(void *ptr, size_t size, size_t nmemb, void *user_data)
-{
-	struct header_info *hi = user_data;
-	size_t remlen, slen, ptrlen = size * nmemb;
-	char *rem, *val = NULL, *key = NULL;
-	void *tmp;
-
-	val = calloc(1, ptrlen);
-	key = calloc(1, ptrlen);
-	if (!key || !val)
-		goto out;
-
-	tmp = memchr(ptr, ':', ptrlen);
-	if (!tmp || (tmp == ptr))	/* skip empty keys / blanks */
-		goto out;
-	slen = tmp - ptr;
-	if ((slen + 1) == ptrlen)	/* skip key w/ no value */
-		goto out;
-	memcpy(key, ptr, slen);		/* store & nul term key */
-	key[slen] = 0;
-
-	rem = ptr + slen + 1;		/* trim value's leading whitespace */
-	remlen = ptrlen - slen - 1;
-	while ((remlen > 0) && (isspace(*rem))) {
-		remlen--;
-		rem++;
-	}
-
-	memcpy(val, rem, remlen);	/* store value, trim trailing ws */
-	val[remlen] = 0;
-	while ((*val) && (isspace(val[strlen(val) - 1])))
-		val[strlen(val) - 1] = 0;
-
-	if (!*val)			/* skip blank value */
-		goto out;
-
-	if (opt_protocol)
-		applog(LOG_DEBUG, "HTTP hdr(%s): %s", key, val);
-
-	if (!strcasecmp("X-Roll-Ntime", key)) {
-		hi->hadrolltime = true;
-		if (!strncasecmp("N", val, 1))
-			applog(LOG_DEBUG, "X-Roll-Ntime: N found");
-		else {
-			hi->canroll = true;
-
-			/* Check to see if expire= is supported and if not, set
-			 * the rolltime to the default scantime */
-			if (strlen(val) > 7 && !strncasecmp("expire=", val, 7)) {
-				sscanf(val + 7, "%d", &hi->rolltime);
-				hi->hadexpire = true;
-			} else
-				hi->rolltime = opt_scantime;
-			applog(LOG_DEBUG, "X-Roll-Ntime expiry set to %d", hi->rolltime);
-		}
-	}
-
-	if (!strcasecmp("X-Long-Polling", key)) {
-		hi->lp_path = val;	/* steal memory reference */
-		val = NULL;
-	}
-
-	if (!strcasecmp("X-Reject-Reason", key)) {
-		hi->reason = val;	/* steal memory reference */
-		val = NULL;
-	}
-
-	if (!strcasecmp("X-Stratum", key)) {
-		hi->stratum_url = val;
-		val = NULL;
-	}
-
-out:
-	free(key);
-	free(val);
-	return ptrlen;
-}
-
-static void last_nettime(struct timeval *last)
-{
-	rd_lock(&netacc_lock);
-	last->tv_sec = nettime.tv_sec;
-	last->tv_usec = nettime.tv_usec;
-	rd_unlock(&netacc_lock);
-}
-
-static void set_nettime(void)
-{
-	wr_lock(&netacc_lock);
-	cgtime(&nettime);
-	wr_unlock(&netacc_lock);
-}
-
-#if CURL_HAS_KEEPALIVE
-static void keep_curlalive(CURL *curl)
-{
-	const int tcp_keepidle = 45;
-	const int tcp_keepintvl = 30;
-	const long int keepalive = 1;
-
-	curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, keepalive);
-	curl_easy_setopt(curl, CURLOPT_TCP_KEEPIDLE, tcp_keepidle);
-	curl_easy_setopt(curl, CURLOPT_TCP_KEEPINTVL, tcp_keepintvl);
-}
-#else
-static void keep_curlalive(CURL *curl)
-{
-	SOCKETTYPE sock;
-
-	curl_easy_getinfo(curl, CURLINFO_LASTSOCKET, (long *)&sock);
-	keep_sockalive(sock);
-}
-#endif
-
-static int curl_debug_cb(__maybe_unused CURL *handle, curl_infotype type,
-			 __maybe_unused char *data, size_t size, void *userdata)
-{
-	struct pool *pool = (struct pool *)userdata;
-
-	switch(type) {
-		case CURLINFO_HEADER_IN:
-		case CURLINFO_DATA_IN:
-		case CURLINFO_SSL_DATA_IN:
-			pool->cgminer_pool_stats.net_bytes_received += size;
-			break;
-		case CURLINFO_HEADER_OUT:
-		case CURLINFO_DATA_OUT:
-		case CURLINFO_SSL_DATA_OUT:
-			pool->cgminer_pool_stats.net_bytes_sent += size;
-			break;
-		case CURLINFO_TEXT:
-		default:
-			break;
-	}
-	return 0;
-}
-
-json_t *json_web_config(const char *url)
-{
-	struct data_buffer all_data = {NULL, 0};
-	char curl_err_str[CURL_ERROR_SIZE];
-	long timeout = 60;
-	json_error_t err;
-	json_t *val;
-	CURL *curl;
-	int rc;
-
-	memset(&err, 0, sizeof(err));
-
-	curl = curl_easy_init();
-	if (unlikely(!curl))
-		quithere(1, "CURL initialisation failed");
-
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
-
-	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
-	curl_easy_setopt(curl, CURLOPT_URL, url);
-	curl_easy_setopt(curl, CURLOPT_ENCODING, "");
-	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
-
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, all_data_cb);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &all_data);
-	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_err_str);
-	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-	curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_TRY);
-
-	val = NULL;
-	rc = curl_easy_perform(curl);
-	curl_easy_cleanup(curl);
-	if (rc) {
-		applog(LOG_ERR, "HTTP config request of '%s' failed: %s", url, curl_err_str);
-		goto c_out;
-	}
-
-	if (!all_data.buf) {
-		applog(LOG_ERR, "Empty config data received from '%s'", url);
-		goto c_out;
-	}
-
-	val = JSON_LOADS(all_data.buf, &err);
-	if (!val) {
-		applog(LOG_ERR, "JSON config decode of '%s' failed(%d): %s", url,
-		       err.line, err.text);
-	}
-	databuf_free(&all_data);
-
-c_out:
-	return val;
-}
-
-json_t *json_rpc_call(CURL *curl, const char *url,
-		      const char *userpass, const char *rpc_req,
-		      bool probe, bool longpoll, int *rolltime,
-		      struct pool *pool, bool share)
-{
-	long timeout = longpoll ? (60 * 60) : 60;
-	struct data_buffer all_data = {NULL, 0};
-	struct header_info hi = {NULL, 0, NULL, NULL, false, false, false};
-	char len_hdr[64], user_agent_hdr[128];
-	char curl_err_str[CURL_ERROR_SIZE];
-	struct curl_slist *headers = NULL;
-	struct upload_buffer upload_data;
-	json_t *val, *err_val, *res_val;
-	bool probing = false;
-	double byte_count;
-	json_error_t err;
-	int rc;
-
-	memset(&err, 0, sizeof(err));
-
-	/* it is assumed that 'curl' is freshly [re]initialized at this pt */
-
-	if (probe)
-		probing = !pool->probed;
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
-
-	// CURLOPT_VERBOSE won't write to stderr if we use CURLOPT_DEBUGFUNCTION
-	curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, curl_debug_cb);
-	curl_easy_setopt(curl, CURLOPT_DEBUGDATA, (void *)pool);
-	curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
-
-	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
-	curl_easy_setopt(curl, CURLOPT_URL, url);
-	curl_easy_setopt(curl, CURLOPT_ENCODING, "");
-	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
-
-	/* Shares are staggered already and delays in submission can be costly
-	 * so do not delay them */
-	if (!opt_delaynet || share)
-		curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1);
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, all_data_cb);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &all_data);
-	curl_easy_setopt(curl, CURLOPT_READFUNCTION, upload_data_cb);
-	curl_easy_setopt(curl, CURLOPT_READDATA, &upload_data);
-	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_err_str);
-	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, resp_hdr_cb);
-	curl_easy_setopt(curl, CURLOPT_HEADERDATA, &hi);
-	curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_TRY);
-	if (pool->rpc_proxy) {
-		curl_easy_setopt(curl, CURLOPT_PROXY, pool->rpc_proxy);
-		curl_easy_setopt(curl, CURLOPT_PROXYTYPE, pool->rpc_proxytype);
-	} else if (opt_socks_proxy) {
-		curl_easy_setopt(curl, CURLOPT_PROXY, opt_socks_proxy);
-		curl_easy_setopt(curl, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS4);
-	}
-	if (userpass) {
-		curl_easy_setopt(curl, CURLOPT_USERPWD, userpass);
-		curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-	}
-	if (longpoll)
-		keep_curlalive(curl);
-	curl_easy_setopt(curl, CURLOPT_POST, 1);
-
-	if (opt_protocol)
-		applog(LOG_DEBUG, "JSON protocol request:\n%s", rpc_req);
-
-	upload_data.buf = rpc_req;
-	upload_data.len = strlen(rpc_req);
-	sprintf(len_hdr, "Content-Length: %lu",
-		(unsigned long) upload_data.len);
-	sprintf(user_agent_hdr, "User-Agent: %s", PACKAGE_STRING);
-
-	headers = curl_slist_append(headers,
-		"Content-type: application/json");
-	headers = curl_slist_append(headers,
-		"X-Mining-Extensions: longpoll midstate rollntime submitold");
-
-	if (likely(global_hashrate)) {
-		char ghashrate[255];
-
-		sprintf(ghashrate, "X-Mining-Hashrate: %llu", global_hashrate);
-		headers = curl_slist_append(headers, ghashrate);
-	}
-
-	headers = curl_slist_append(headers, len_hdr);
-	headers = curl_slist_append(headers, user_agent_hdr);
-	headers = curl_slist_append(headers, "Expect:"); /* disable Expect hdr*/
-
-	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-	if (opt_delaynet) {
-		/* Don't delay share submission, but still track the nettime */
-		if (!share) {
-			long long now_msecs, last_msecs;
-			struct timeval now, last;
-
-			cgtime(&now);
-			last_nettime(&last);
-			now_msecs = (long long)now.tv_sec * 1000;
-			now_msecs += now.tv_usec / 1000;
-			last_msecs = (long long)last.tv_sec * 1000;
-			last_msecs += last.tv_usec / 1000;
-			if (now_msecs > last_msecs && now_msecs - last_msecs < 250) {
-				struct timespec rgtp;
-
-				rgtp.tv_sec = 0;
-				rgtp.tv_nsec = (250 - (now_msecs - last_msecs)) * 1000000;
-				nanosleep(&rgtp, NULL);
-			}
-		}
-		set_nettime();
-	}
-
-	rc = curl_easy_perform(curl);
-	if (rc) {
-		applog(LOG_INFO, "HTTP request failed: %s", curl_err_str);
-		goto err_out;
-	}
-
-	if (!all_data.buf) {
-		applog(LOG_DEBUG, "Empty data received in json_rpc_call.");
-		goto err_out;
-	}
-
-	pool->cgminer_pool_stats.times_sent++;
-	if (curl_easy_getinfo(curl, CURLINFO_SIZE_UPLOAD, &byte_count) == CURLE_OK)
-		pool->cgminer_pool_stats.bytes_sent += byte_count;
-	pool->cgminer_pool_stats.times_received++;
-	if (curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &byte_count) == CURLE_OK)
-		pool->cgminer_pool_stats.bytes_received += byte_count;
-
-	if (probing) {
-		pool->probed = true;
-		/* If X-Long-Polling was found, activate long polling */
-		if (hi.lp_path) {
-			if (pool->hdr_path != NULL)
-				free(pool->hdr_path);
-			pool->hdr_path = hi.lp_path;
-		} else
-			pool->hdr_path = NULL;
-		if (hi.stratum_url) {
-			pool->stratum_url = hi.stratum_url;
-			hi.stratum_url = NULL;
-		}
-	} else {
-		if (hi.lp_path) {
-			free(hi.lp_path);
-			hi.lp_path = NULL;
-		}
-		if (hi.stratum_url) {
-			free(hi.stratum_url);
-			hi.stratum_url = NULL;
-		}
-	}
-
-	*rolltime = hi.rolltime;
-	pool->cgminer_pool_stats.rolltime = hi.rolltime;
-	pool->cgminer_pool_stats.hadrolltime = hi.hadrolltime;
-	pool->cgminer_pool_stats.canroll = hi.canroll;
-	pool->cgminer_pool_stats.hadexpire = hi.hadexpire;
-
-	val = JSON_LOADS(all_data.buf, &err);
-	if (!val) {
-		applog(LOG_INFO, "JSON decode failed(%d): %s", err.line, err.text);
-
-		if (opt_protocol)
-			applog(LOG_DEBUG, "JSON protocol response:\n%s", (char *)(all_data.buf));
-
-		goto err_out;
-	}
-
-	if (opt_protocol) {
-		char *s = json_dumps(val, JSON_INDENT(3));
-
-		applog(LOG_DEBUG, "JSON protocol response:\n%s", s);
-		free(s);
-	}
-
-	/* JSON-RPC valid response returns a non-null 'result',
-	 * and a null 'error'.
-	 */
-	res_val = json_object_get(val, "result");
-	err_val = json_object_get(val, "error");
-
-	if (!res_val ||(err_val && !json_is_null(err_val))) {
-		char *s;
-
-		if (err_val)
-			s = json_dumps(err_val, JSON_INDENT(3));
-		else
-			s = strdup("(unknown reason)");
-
-		applog(LOG_INFO, "JSON-RPC call failed: %s", s);
-
-		free(s);
-
-		goto err_out;
-	}
-
-	if (hi.reason) {
-		json_object_set_new(val, "reject-reason", json_string(hi.reason));
-		free(hi.reason);
-		hi.reason = NULL;
-	}
-	successful_connect = true;
-	databuf_free(&all_data);
-	curl_slist_free_all(headers);
-	curl_easy_reset(curl);
-	return val;
-
-err_out:
-	databuf_free(&all_data);
-	curl_slist_free_all(headers);
-	curl_easy_reset(curl);
-	if (!successful_connect)
-		applog(LOG_DEBUG, "Failed to connect in json_rpc_call");
-	curl_easy_setopt(curl, CURLOPT_FRESH_CONNECT, 1);
-	return NULL;
-}
-#define PROXY_HTTP	CURLPROXY_HTTP
-#define PROXY_HTTP_1_0	CURLPROXY_HTTP_1_0
-#define PROXY_SOCKS4	CURLPROXY_SOCKS4
-#define PROXY_SOCKS5	CURLPROXY_SOCKS5
-#define PROXY_SOCKS4A	CURLPROXY_SOCKS4A
-#define PROXY_SOCKS5H	CURLPROXY_SOCKS5_HOSTNAME
-#else /* HAVE_LIBCURL */
 #define PROXY_HTTP	0
 #define PROXY_HTTP_1_0	1
 #define PROXY_SOCKS4	2
 #define PROXY_SOCKS5	3
 #define PROXY_SOCKS4A	4
 #define PROXY_SOCKS5H	5
-#endif /* HAVE_LIBCURL */
+
 
 static struct {
 	const char *name;
@@ -1396,43 +718,7 @@ char *Strsep(char **stringp, const char *delim)
 	return ret;
 }
 
-#ifdef WIN32
-/* Mingw32 has no strsep so create our own custom one  */
 
-/* Windows start time is since 1601 LOL so convert it to unix epoch 1970. */
-#define EPOCHFILETIME (116444736000000000LL)
-
-/* These are cgminer specific sleep functions that use an absolute nanosecond
- * resolution timer to avoid poor usleep accuracy and overruns. */
-
-/* Return the system time as an lldiv_t in decimicroseconds. */
-static void decius_time(lldiv_t *lidiv)
-{
-	FILETIME ft;
-	LARGE_INTEGER li;
-
-	GetSystemTimeAsFileTime(&ft);
-	li.LowPart  = ft.dwLowDateTime;
-	li.HighPart = ft.dwHighDateTime;
-	li.QuadPart -= EPOCHFILETIME;
-
-	/* SystemTime is in decimicroseconds so divide by an unusual number */
-	*lidiv = lldiv(li.QuadPart, 10000000);
-}
-
-/* This is a cgminer gettimeofday wrapper. Since we always call gettimeofday
- * with tz set to NULL, and windows' default resolution is only 15ms, this
- * gives us higher resolution times on windows. */
-void cgtime(struct timeval *tv)
-{
-	lldiv_t lidiv;
-
-	decius_time(&lidiv);
-	tv->tv_sec = lidiv.quot;
-	tv->tv_usec = lidiv.rem / 10;
-}
-
-#else /* WIN32 */
 void cgtime(struct timeval *tv)
 {
 	gettimeofday(tv, NULL);
@@ -1453,7 +739,6 @@ void cgtimer_sub(cgtimer_t *a, cgtimer_t *b, cgtimer_t *res)
 		res->tv_sec--;
 	}
 }
-#endif /* WIN32 */
 
 #ifdef CLOCK_MONOTONIC /* Essentially just linux */
 void cgtimer_time(cgtimer_t *ts_start)
@@ -1491,21 +776,7 @@ void cgsleep_us_r(cgtimer_t *ts_start, int64_t us)
 	nanosleep_abstime(&ts_end);
 }
 #else /* CLOCK_MONOTONIC */
-#ifdef __MACH__
-#include <mach/clock.h>
-#include <mach/mach.h>
-void cgtimer_time(cgtimer_t *ts_start)
-{
-	clock_serv_t cclock;
-	mach_timespec_t mts;
 
-	host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &cclock);
-	clock_get_time(cclock, &mts);
-	mach_port_deallocate(mach_task_self(), cclock);
-	ts_start->tv_sec = mts.tv_sec;
-	ts_start->tv_nsec = mts.tv_nsec;
-}
-#elif !defined(WIN32) /* __MACH__ - Everything not linux/macosx/win32 */
 void cgtimer_time(cgtimer_t *ts_start)
 {
 	struct timeval tv;
@@ -1514,77 +785,7 @@ void cgtimer_time(cgtimer_t *ts_start)
 	ts_start->tv_sec = tv->tv_sec;
 	ts_start->tv_nsec = tv->tv_usec * 1000;
 }
-#endif /* __MACH__ */
 
-#ifdef WIN32
-/* For windows we use the SystemTime stored as a LARGE_INTEGER as the cgtimer_t
- * typedef, allowing us to have sub-microsecond resolution for times, do simple
- * arithmetic for timer calculations, and use windows' own hTimers to get
- * accurate absolute timeouts. */
-int cgtimer_to_ms(cgtimer_t *cgt)
-{
-	return (int)(cgt->QuadPart / 10000LL);
-}
-
-/* Subtracts b from a and stores it in res. */
-void cgtimer_sub(cgtimer_t *a, cgtimer_t *b, cgtimer_t *res)
-{
-	res->QuadPart = a->QuadPart - b->QuadPart;
-}
-
-/* Note that cgtimer time is NOT offset by the unix epoch since we use absolute
- * timeouts with hTimers. */
-void cgtimer_time(cgtimer_t *ts_start)
-{
-	FILETIME ft;
-
-	GetSystemTimeAsFileTime(&ft);
-	ts_start->LowPart = ft.dwLowDateTime;
-	ts_start->HighPart = ft.dwHighDateTime;
-}
-
-static void liSleep(LARGE_INTEGER *li, int timeout)
-{
-	HANDLE hTimer;
-	DWORD ret;
-
-	if (unlikely(timeout <= 0))
-		return;
-
-	hTimer = CreateWaitableTimer(NULL, TRUE, NULL);
-	if (unlikely(!hTimer))
-		quit(1, "Failed to create hTimer in liSleep");
-	ret = SetWaitableTimer(hTimer, li, 0, NULL, NULL, 0);
-	if (unlikely(!ret))
-		quit(1, "Failed to SetWaitableTimer in liSleep");
-	/* We still use a timeout as a sanity check in case the system time
-	 * is changed while we're running */
-	ret = WaitForSingleObject(hTimer, timeout);
-	if (unlikely(ret != WAIT_OBJECT_0 && ret != WAIT_TIMEOUT))
-		quit(1, "Failed to WaitForSingleObject in liSleep");
-	CloseHandle(hTimer);
-}
-
-void cgsleep_ms_r(cgtimer_t *ts_start, int ms)
-{
-	LARGE_INTEGER li;
-
-	li.QuadPart = ts_start->QuadPart + (int64_t)ms * 10000LL;
-	liSleep(&li, ms);
-}
-
-void cgsleep_us_r(cgtimer_t *ts_start, int64_t us)
-{
-	LARGE_INTEGER li;
-	int ms;
-
-	li.QuadPart = ts_start->QuadPart + us * 10LL;
-	ms = us / 1000;
-	if (!ms)
-		ms = 1;
-	liSleep(&li, ms);
-}
-#else /* WIN32 */
 static void cgsleep_spec(struct timespec *ts_diff, const struct timespec *ts_start)
 {
 	struct timespec now;
@@ -1612,7 +813,6 @@ void cgsleep_us_r(cgtimer_t *ts_start, int64_t us)
 	us_to_timespec(&ts_diff, us);
 	cgsleep_spec(&ts_diff, ts_start);
 }
-#endif /* WIN32 */
 #endif /* CLOCK_MONOTONIC */
 
 void cgsleep_ms(int ms)
@@ -1759,13 +959,7 @@ retry:
 				goto retry;
 			return SEND_SELECTFAIL;
 		}
-#ifdef __APPLE__
-		sent = send(pool->sock, s + ssent, len, SO_NOSIGPIPE);
-#elif WIN32
-		sent = send(pool->sock, s + ssent, len, 0);
-#else
 		sent = send(pool->sock, s + ssent, len, MSG_NOSIGNAL);
-#endif
 		if (sent < 0) {
 			if (!sock_blocks())
 				return SEND_SENDFAIL;
@@ -3172,105 +2366,6 @@ void RenameThread(const char* name)
 /* cgminer specific wrappers for true unnamed semaphore usage on platforms
  * that support them and for apple which does not. We use a single byte across
  * a pipe to emulate semaphore behaviour there. */
-#ifdef __APPLE__
-void _cgsem_init(cgsem_t *cgsem, const char *file, const char *func, const int line)
-{
-	int flags, fd, i;
-
-	if (pipe(cgsem->pipefd) == -1)
-		quitfrom(1, file, func, line, "Failed pipe errno=%d", errno);
-
-	/* Make the pipes FD_CLOEXEC to allow them to close should we call
-	 * execv on restart. */
-	for (i = 0; i < 2; i++) {
-		fd = cgsem->pipefd[i];
-		flags = fcntl(fd, F_GETFD, 0);
-		flags |= FD_CLOEXEC;
-		if (fcntl(fd, F_SETFD, flags) == -1)
-			quitfrom(1, file, func, line, "Failed to fcntl errno=%d", errno);
-	}
-}
-
-void _cgsem_post(cgsem_t *cgsem, const char *file, const char *func, const int line)
-{
-	const char buf = 1;
-	int ret;
-
-retry:
-	ret = write(cgsem->pipefd[1], &buf, 1);
-	if (unlikely(ret == 0))
-		applog(LOG_WARNING, "Failed to write errno=%d" IN_FMT_FFL, errno, file, func, line);
-	else if (unlikely(ret < 0 && interrupted))
-		goto retry;
-}
-
-void _cgsem_wait(cgsem_t *cgsem, const char *file, const char *func, const int line)
-{
-	char buf;
-	int ret;
-retry:
-	ret = read(cgsem->pipefd[0], &buf, 1);
-	if (unlikely(ret == 0))
-		applog(LOG_WARNING, "Failed to read errno=%d" IN_FMT_FFL, errno, file, func, line);
-	else if (unlikely(ret < 0 && interrupted))
-		goto retry;
-}
-
-void cgsem_destroy(cgsem_t *cgsem)
-{
-	close(cgsem->pipefd[1]);
-	close(cgsem->pipefd[0]);
-}
-
-/* This is similar to sem_timedwait but takes a millisecond value */
-int _cgsem_mswait(cgsem_t *cgsem, int ms, const char *file, const char *func, const int line)
-{
-	struct timeval timeout;
-	int ret, fd;
-	fd_set rd;
-	char buf;
-
-retry:
-	fd = cgsem->pipefd[0];
-	FD_ZERO(&rd);
-	FD_SET(fd, &rd);
-	ms_to_timeval(&timeout, ms);
-	ret = select(fd + 1, &rd, NULL, NULL, &timeout);
-
-	if (ret > 0) {
-		ret = read(fd, &buf, 1);
-		return 0;
-	}
-	if (likely(!ret))
-		return ETIMEDOUT;
-	if (interrupted())
-		goto retry;
-	quitfrom(1, file, func, line, "Failed to sem_timedwait errno=%d cgsem=0x%p", errno, cgsem);
-	/* We don't reach here */
-	return 0;
-}
-
-/* Reset semaphore count back to zero */
-void cgsem_reset(cgsem_t *cgsem)
-{
-	int ret, fd;
-	fd_set rd;
-	char buf;
-
-	fd = cgsem->pipefd[0];
-	FD_ZERO(&rd);
-	FD_SET(fd, &rd);
-	do {
-		struct timeval timeout = {0, 0};
-
-		ret = select(fd + 1, &rd, NULL, NULL, &timeout);
-		if (ret > 0)
-			ret = read(fd, &buf, 1);
-		else if (unlikely(ret < 0 && interrupted()))
-			ret = 1;
-	} while (ret > 0);
-}
-#else
 void _cgsem_init(cgsem_t *cgsem, const char *file, const char *func, const int line)
 {
 	int ret;
@@ -3332,7 +2427,6 @@ void cgsem_destroy(cgsem_t *cgsem)
 {
 	sem_destroy(cgsem);
 }
-#endif
 
 /* Provide a completion_timeout helper function for unreliable functions that
  * may die due to driver issues etc that time out if the function fails and

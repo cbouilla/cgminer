@@ -3,7 +3,6 @@
 
 #include <semaphore.h>
 
-#if defined(unix) || defined(__APPLE__)
 	#include <errno.h>
 	#include <sys/socket.h>
 	#include <netinet/in.h>
@@ -29,53 +28,10 @@
 	{
 		return (errno == EINTR);
 	}
-#elif defined WIN32
-	#include <winsock2.h>
-	#include <ws2tcpip.h>
-
-	#define SOCKETTYPE SOCKET
-	#define SOCKETFAIL(a) ((int)(a) == SOCKET_ERROR)
-	#define INVSOCK INVALID_SOCKET
-	#define INVINETADDR INADDR_NONE
-	#define CLOSESOCKET closesocket
-
-	int Inet_Pton(int af, const char *src, void *dst);
-	#define INET_PTON Inet_Pton
-
-	extern char *WSAErrorMsg(void);
-	#define SOCKERRMSG WSAErrorMsg()
-
-	/* Check for windows variants of the errors as well as when ming
-	 * decides to wrap the error into the errno equivalent. */
-	static inline bool sock_blocks(void)
-	{
-		return (WSAGetLastError() == WSAEWOULDBLOCK || errno == EAGAIN);
-	}
-	static inline bool sock_timeout(void)
-	{
-		return (WSAGetLastError() == WSAETIMEDOUT || errno == ETIMEDOUT);
-	}
-	static inline bool interrupted(void)
-	{
-		return (WSAGetLastError() == WSAEINTR || errno == EINTR);
-	}
-	#ifndef SHUT_RDWR
-	#define SHUT_RDWR SD_BOTH
-	#endif
-
-	#ifndef in_addr_t
-	#define in_addr_t uint32_t
-	#endif
-#endif
 
 #define JSON_LOADS(str, err_ptr) json_loads((str), 0, (err_ptr))
 
-#ifdef HAVE_LIBCURL
-#include <curl/curl.h>
-typedef curl_proxytype proxytypes_t;
-#else
 typedef int proxytypes_t;
-#endif /* HAVE_LIBCURL */
 
 /* cgminer locks, a write biased variant of rwlocks */
 struct cglock {
@@ -87,20 +43,9 @@ typedef struct cglock cglock_t;
 
 /* cgminer specific unnamed semaphore implementations to cope with osx not
  * implementing them. */
-#ifdef __APPLE__
-struct cgsem {
-	int pipefd[2];
-};
-
-typedef struct cgsem cgsem_t;
-#else
 typedef sem_t cgsem_t;
-#endif
-#ifdef WIN32
-typedef LARGE_INTEGER cgtimer_t;
-#else
+
 typedef struct timespec cgtimer_t;
-#endif
 
 int no_yield(void);
 int (*selective_yield)(void);

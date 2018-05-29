@@ -115,14 +115,12 @@ int opt_queue = 1;
 static int max_queue = 1;
 int opt_scantime = -1;
 int opt_expiry = 120;
-static const bool opt_time = true;
 unsigned long long global_hashrate;
 unsigned long global_quota_gcd = 1;
 time_t last_getwork;
 
-#if defined(USE_USBUTILS)
+
 int nDevs;
-#endif
 bool opt_restart = true;
 bool opt_nogpu;
 
@@ -271,7 +269,7 @@ static struct pool *currentpool = NULL;
 int total_pools, enabled_pools;
 enum pool_strategy pool_strategy = POOL_FAILOVER;
 int opt_rotate_period;
-static int total_urls, total_users, total_passes, total_userpasses;
+// static int total_urls, total_users, total_passes, total_userpasses;
 
 static
 #ifndef HAVE_CURSES
@@ -329,10 +327,8 @@ static int include_count;
 #define JSON_MAX_DEPTH_ERR "Too many levels of JSON includes (limit 10) or a loop"
 #define JSON_WEB_ERROR "WEB config err"
 
-#if defined(unix) || defined(__APPLE__)
-	static char *opt_stderr_cmd = NULL;
-	static int forkpid;
-#endif // defined(unix)
+static int forkpid;
+
 
 struct sigaction termhandler, inthandler;
 
@@ -702,29 +698,6 @@ void get_intrange(char *arg, int *val1, int *val2)
 		*val2 = *val1;
 }
 
-static char *set_balance(enum pool_strategy *strategy)
-{
-	*strategy = POOL_BALANCE;
-	return NULL;
-}
-
-static char *set_loadbalance(enum pool_strategy *strategy)
-{
-	*strategy = POOL_LOADBALANCE;
-	return NULL;
-}
-
-static char *set_rotate(const char *arg, char __maybe_unused *i)
-{
-	pool_strategy = POOL_ROTATE;
-	return set_int_range(arg, &opt_rotate_period, 0, 9999);
-}
-
-static char *set_rr(enum pool_strategy *strategy)
-{
-	*strategy = POOL_ROUNDROBIN;
-	return NULL;
-}
 
 /* Detect that url is for a stratum protocol either via the presence of
  * stratum+tcp or by detecting a stratum server response */
@@ -744,179 +717,13 @@ bool detect_stratum(struct pool *pool, char *url)
 	return false;
 }
 
-static struct pool *add_url(void)
-{
-	total_urls++;
-	if (total_urls > total_pools)
-		add_pool();
-	return pools[total_urls - 1];
-}
 
-static void setup_url(struct pool *pool, char *arg)
-{
-	arg = get_proxy(arg, pool);
-
-	if (detect_stratum(pool, arg))
-		return;
-
-	opt_set_charp(arg, &pool->rpc_url);
-	if (strncmp(arg, "http://", 7) &&
-	    strncmp(arg, "https://", 8)) {
-		char *httpinput;
-
-		httpinput = malloc(256);
-		if (!httpinput)
-			quit(1, "Failed to malloc httpinput");
-		strcpy(httpinput, "stratum+tcp://");
-		strncat(httpinput, arg, 242);
-		detect_stratum(pool, httpinput);
-	}
-}
-
-static char *set_url(char *arg)
-{
-	struct pool *pool = add_url();
-
-	setup_url(pool, arg);
-	return NULL;
-}
-
-static char *set_quota(char *arg)
-{
-	char *semicolon = strchr(arg, ';'), *url;
-	int len, qlen, quota;
-	struct pool *pool;
-
-	if (!semicolon)
-		return "No semicolon separated quota;URL pair found";
-	len = strlen(arg);
-	*semicolon = '\0';
-	qlen = strlen(arg);
-	if (!qlen)
-		return "No parameter for quota found";
-	len -= qlen + 1;
-	if (len < 1)
-		return "No parameter for URL found";
-	quota = atoi(arg);
-	if (quota < 0)
-		return "Invalid negative parameter for quota set";
-	url = arg + qlen + 1;
-	pool = add_url();
-	setup_url(pool, url);
-	pool->quota = quota;
-	applog(LOG_INFO, "Setting pool %d to quota %d", pool->pool_no, pool->quota);
-	adjust_quota_gcd();
-
-	return NULL;
-}
-
-static char *set_user(const char *arg)
-{
-	struct pool *pool;
-
-	if (total_userpasses)
-		return "Use only user + pass or userpass, but not both";
-	total_users++;
-	if (total_users > total_pools)
-		add_pool();
-
-	pool = pools[total_users - 1];
-	opt_set_charp(arg, &pool->rpc_user);
-
-	return NULL;
-}
-
-static char *set_pass(const char *arg)
-{
-	struct pool *pool;
-
-	if (total_userpasses)
-		return "Use only user + pass or userpass, but not both";
-	total_passes++;
-	if (total_passes > total_pools)
-		add_pool();
-
-	pool = pools[total_passes - 1];
-	opt_set_charp(arg, &pool->rpc_pass);
-
-	return NULL;
-}
-
-static char *set_userpass(const char *arg)
-{
-	struct pool *pool;
-	char *updup;
-
-	if (total_users || total_passes)
-		return "Use only user + pass or userpass, but not both";
-	total_userpasses++;
-	if (total_userpasses > total_pools)
-		add_pool();
-
-	pool = pools[total_userpasses - 1];
-	updup = strdup(arg);
-	opt_set_charp(arg, &pool->rpc_userpass);
-	pool->rpc_user = strtok(updup, ":");
-	if (!pool->rpc_user)
-		return "Failed to find : delimited user info";
-	pool->rpc_pass = strtok(NULL, ":");
-	if (!pool->rpc_pass)
-		pool->rpc_pass = strdup("");
-
-	return NULL;
-}
 
 static char *enable_debug(bool *flag)
 {
 	*flag = true;
 	/* Turn on verbose output, too. */
 	opt_log_output = true;
-	return NULL;
-}
-
-static char *opt_set_sched_start;
-static char *opt_set_sched_stop;
-
-static char *set_schedtime(const char *arg, struct schedtime *st)
-{
-	if (sscanf(arg, "%d:%d", &st->tm.tm_hour, &st->tm.tm_min) != 2)
-		return "Invalid time set, should be HH:MM";
-	if (st->tm.tm_hour > 23 || st->tm.tm_min > 59 || st->tm.tm_hour < 0 || st->tm.tm_min < 0)
-		return "Invalid time set.";
-	st->enable = true;
-	return NULL;
-}
-
-static char *set_sched_start(const char *arg)
-{
-	return set_schedtime(arg, &schedstart);
-}
-
-static char *set_sched_stop(const char *arg)
-{
-	return set_schedtime(arg, &schedstop);
-}
-
-static char *opt_set_sharelog;
-static char* set_sharelog(char *arg)
-{
-	char *r = "";
-	long int i = strtol(arg, &r, 10);
-
-	if ((!*r) && i >= 0 && i <= INT_MAX) {
-		sharelog_file = fdopen((int)i, "a");
-		if (!sharelog_file)
-			applog(LOG_ERR, "Failed to open fd %u for share log", (unsigned int)i);
-	} else if (!strcmp(arg, "-")) {
-		sharelog_file = stdout;
-		if (!sharelog_file)
-			applog(LOG_ERR, "Standard output missing for share log");
-	} else {
-		sharelog_file = fopen(arg, "a");
-		if (!sharelog_file)
-			applog(LOG_ERR, "Failed to open %s for share log", arg);
-	}
-
 	return NULL;
 }
 
@@ -979,27 +786,6 @@ static char *set_logfile_path(const char *arg)
 	return NULL;
 }
 
-static char *set_logfile_openflag(const char *arg)
-{
-	opt_set_charp(arg, &opt_logfile_openflag);
-
-	return NULL;
-}
-
-static char *set_logwork_path(const char *arg)
-{
-	opt_set_charp(arg, &opt_logwork_path);
-
-	return NULL;
-}
-
-static char *set_logwork_asicnum(const char *arg)
-{
-	opt_set_charp(arg, &opt_logwork_asicnum);
-
-	return NULL;
-}
-
 static char *set_float_125_to_500(const char *arg, float *i)
 {
 	char *err = opt_set_floatval(arg, i);
@@ -1025,58 +811,8 @@ static char *set_float_100_to_250(const char *arg, float *i)
 
 	return NULL;
 }
-static char *set_version_path(const char *arg)
-{
-	opt_set_charp(arg, &opt_version_path);
 
-	return NULL;
-}
 
-#ifdef USE_BMSC
-static char *set_bmsc_options(const char *arg)
-{
-	opt_set_charp(arg, &opt_bmsc_options);
-
-	return NULL;
-}
-
-static char *set_bmsc_bandops(const char *arg)
-{
-	opt_set_charp(arg, &opt_bmsc_bandops);
-
-	return NULL;
-}
-
-static char *set_bmsc_timing(const char *arg)
-{
-	opt_set_charp(arg, &opt_bmsc_timing);
-
-	return NULL;
-}
-
-static char *set_bmsc_freq(const char *arg)
-{
-	opt_set_charp(arg, &opt_bmsc_freq);
-
-	return NULL;
-}
-
-static char *set_bmsc_rdreg(const char *arg)
-{
-	opt_set_charp(arg, &opt_bmsc_rdreg);
-
-	return NULL;
-}
-
-static char *set_bmsc_voltage(const char *arg)
-{
-	opt_set_charp(arg, &opt_bmsc_voltage);
-
-	return NULL;
-}
-#endif
-
-#ifdef USE_BITMAIN
 static char *set_bitmain_options(const char *arg)
 {
 	opt_set_charp(arg, &opt_bitmain_options);
@@ -1096,7 +832,7 @@ static char *set_bitmain_voltage(const char *arg)
 	return NULL;
 }
 
-#endif
+
 
 static char *set_null(const char __maybe_unused *arg)
 {
@@ -1107,62 +843,62 @@ static char *set_null(const char __maybe_unused *arg)
 static struct opt_table opt_config_table[] = {
 
 
-	OPT_WITH_ARG("--version-file",
-			 set_version_path, NULL, opt_hidden,
-		     "Set miner version file"),
-	OPT_WITH_ARG("--logfile-openflag",
-			set_logfile_openflag, NULL, opt_hidden,
-			"Set log file open flag, default: a+"),
-	OPT_WITH_ARG("--logwork",
-			set_logwork_path, NULL, opt_hidden,
-			"Set log work file path, following: minertext"),
-	OPT_WITH_ARG("--logwork-asicnum",
-			set_logwork_asicnum, NULL, opt_hidden,
-			"Set log work asic num, following: 1, 32, 64"),
-	OPT_WITHOUT_ARG("--logwork-diff",
-			opt_set_bool, &opt_logwork_diff,
-			"Allow log work diff"),
+	// OPT_WITH_ARG("--version-file",
+	// 		 set_version_path, NULL, opt_hidden,
+	// 	     "Set miner version file"),
+	// OPT_WITH_ARG("--logfile-openflag",
+	// 		set_logfile_openflag, NULL, opt_hidden,
+	// 		"Set log file open flag, default: a+"),
+	// OPT_WITH_ARG("--logwork",
+	// 		set_logwork_path, NULL, opt_hidden,
+	// 		"Set log work file path, following: minertext"),
+	// OPT_WITH_ARG("--logwork-asicnum",
+	// 		set_logwork_asicnum, NULL, opt_hidden,
+	// 		"Set log work asic num, following: 1, 32, 64"),
+	// OPT_WITHOUT_ARG("--logwork-diff",
+	// 		opt_set_bool, &opt_logwork_diff,
+	// 		"Allow log work diff"),
 	OPT_WITH_ARG("--logfile",
 				set_logfile_path, NULL, opt_hidden,
 				"Set log file, default: cgminer.log"),	
-	OPT_WITH_ARG("--api-allow",
-		     opt_set_charp, NULL, &opt_api_allow,
-		     "Allow API access only to the given list of [G:]IP[/Prefix] addresses[/subnets]"),
-	OPT_WITH_ARG("--api-description",
-		     opt_set_charp, NULL, &opt_api_description,
-		     "Description placed in the API status header, default: cgminer version"),
-	OPT_WITH_ARG("--api-groups",
-		     opt_set_charp, NULL, &opt_api_groups,
-		     "API one letter groups G:cmd:cmd[,P:cmd:*...] defining the cmds a groups can use"),
-	OPT_WITHOUT_ARG("--api-listen",
-			opt_set_bool, &opt_api_listen,
-			"Enable API, default: disabled"),
-	OPT_WITHOUT_ARG("--api-mcast",
-			opt_set_bool, &opt_api_mcast,
-			"Enable API Multicast listener, default: disabled"),
-	OPT_WITH_ARG("--api-mcast-addr",
-		     opt_set_charp, NULL, &opt_api_mcast_addr,
-		     "API Multicast listen address"),
-	OPT_WITH_ARG("--api-mcast-code",
-		     opt_set_charp, NULL, &opt_api_mcast_code,
-		     "Code expected in the API Multicast message, don't use '-'"),
-	OPT_WITH_ARG("--api-mcast-des",
-		     opt_set_charp, NULL, &opt_api_mcast_des,
-		     "Description appended to the API Multicast reply, default: ''"),
-	OPT_WITH_ARG("--api-mcast-port",
-		     set_int_1_to_65535, opt_show_intval, &opt_api_mcast_port,
-		     "API Multicast listen port"),
-	OPT_WITHOUT_ARG("--api-network",
-			opt_set_bool, &opt_api_network,
-			"Allow API (if enabled) to listen on/for any address, default: only 127.0.0.1"),
-	OPT_WITH_ARG("--api-port",
-		     set_int_1_to_65535, opt_show_intval, &opt_api_port,
-		     "Port number of miner API"),
-	OPT_WITH_ARG("--api-host",
-		     opt_set_charp, NULL, &opt_api_host,
-		     "Specify API listen address, default: 0.0.0.0"),
+	// OPT_WITH_ARG("--api-allow",
+	// 	     opt_set_charp, NULL, &opt_api_allow,
+	// 	     "Allow API access only to the given list of [G:]IP[/Prefix] addresses[/subnets]"),
+	// OPT_WITH_ARG("--api-description",
+	// 	     opt_set_charp, NULL, &opt_api_description,
+	// 	     "Description placed in the API status header, default: cgminer version"),
+	// OPT_WITH_ARG("--api-groups",
+	// 	     opt_set_charp, NULL, &opt_api_groups,
+	// 	     "API one letter groups G:cmd:cmd[,P:cmd:*...] defining the cmds a groups can use"),
+	// OPT_WITHOUT_ARG("--api-listen",
+	// 		opt_set_bool, &opt_api_listen,
+	// 		"Enable API, default: disabled"),
+	// OPT_WITHOUT_ARG("--api-mcast",
+	// 		opt_set_bool, &opt_api_mcast,
+	// 		"Enable API Multicast listener, default: disabled"),
+	// OPT_WITH_ARG("--api-mcast-addr",
+	// 	     opt_set_charp, NULL, &opt_api_mcast_addr,
+	// 	     "API Multicast listen address"),
+	// OPT_WITH_ARG("--api-mcast-code",
+	// 	     opt_set_charp, NULL, &opt_api_mcast_code,
+	// 	     "Code expected in the API Multicast message, don't use '-'"),
+	// OPT_WITH_ARG("--api-mcast-des",
+	// 	     opt_set_charp, NULL, &opt_api_mcast_des,
+	// 	     "Description appended to the API Multicast reply, default: ''"),
+	// OPT_WITH_ARG("--api-mcast-port",
+	// 	     set_int_1_to_65535, opt_show_intval, &opt_api_mcast_port,
+	// 	     "API Multicast listen port"),
+	// OPT_WITHOUT_ARG("--api-network",
+	// 		opt_set_bool, &opt_api_network,
+	// 		"Allow API (if enabled) to listen on/for any address, default: only 127.0.0.1"),
+	// OPT_WITH_ARG("--api-port",
+	// 	     set_int_1_to_65535, opt_show_intval, &opt_api_port,
+	// 	     "Port number of miner API"),
+	// OPT_WITH_ARG("--api-host",
+	// 	     opt_set_charp, NULL, &opt_api_host,
+	// 	     "Specify API listen address, default: 0.0.0.0"),
 
-#ifdef USE_BITMAIN
+// bitmain stuff
 	OPT_WITH_ARG("--bitmain-dev",
 			set_bitmain_dev, NULL, NULL,
 			"Set bitmain device (default: usb mode, other windows: COM1 or linux: /dev/bitmain-asic)"),
@@ -1208,127 +944,118 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITH_ARG("--bitmain-temp",
 		     set_int_0_to_100, opt_show_intval, &opt_bitmain_temp,
 		     "Set bitmain target temperature"),
-#endif
 
-	OPT_WITH_ARG("--hotplug",
-		     set_int_0_to_9999, NULL, &hotplug_time,
-#ifdef USE_USBUTILS
-		     "Seconds between hotplug checks (0 means never check)"
-#else
-		     opt_hidden
-#endif
-		    ),
 
-#if defined(unix) || defined(__APPLE__)
-	OPT_WITH_ARG("--monitor|-m",
-		     opt_set_charp, NULL, &opt_stderr_cmd,
-		     "Use custom pipe cmd for output messages"),
-#endif // defined(unix)
+	// OPT_WITH_ARG("--hotplug",
+	// 	     set_int_0_to_9999, NULL, &hotplug_time,
+	// 	     "Seconds between hotplug checks (0 means never check)"
+	// 	    ),
 
-	OPT_WITHOUT_ARG("--net-delay",
-			opt_set_bool, &opt_delaynet,
-			"Impose small delays in networking to not overload slow routers"),
-	OPT_WITHOUT_ARG("--no-pool-disable",
-			opt_set_invbool, &opt_disable_pool,
-			opt_hidden),
-	OPT_WITHOUT_ARG("--no-submit-stale",
-			opt_set_invbool, &opt_submit_stale,
-		        "Don't submit shares if they are detected as stale"),
 
-	OPT_WITH_ARG("--pass|-p",
-		     set_pass, NULL, &opt_set_null,
-		     "Password for bitcoin JSON-RPC server"),
-	OPT_WITHOUT_ARG("--per-device-stats",
-			opt_set_bool, &want_per_device_stats,
-			"Force verbose mode and output per-device statistics"),
-	OPT_WITH_ARG("--pools",
-			opt_set_bool, NULL, &opt_set_null, opt_hidden),
-	OPT_WITHOUT_ARG("--protocol-dump|-P",
-			opt_set_bool, &opt_protocol,
-			"Verbose dump of protocol-level activities"),
+	// OPT_WITH_ARG("--monitor|-m",
+	// 	     opt_set_charp, NULL, &opt_stderr_cmd,
+	// 	     "Use custom pipe cmd for output messages"),
+
+	// OPT_WITHOUT_ARG("--net-delay",
+	// 		opt_set_bool, &opt_delaynet,
+	// 		"Impose small delays in networking to not overload slow routers"),
+	// OPT_WITHOUT_ARG("--no-pool-disable",
+	// 		opt_set_invbool, &opt_disable_pool,
+	// 		opt_hidden),
+	// OPT_WITHOUT_ARG("--no-submit-stale",
+	// 		opt_set_invbool, &opt_submit_stale,
+	// 	        "Don't submit shares if they are detected as stale"),
+
+	// OPT_WITH_ARG("--pass|-p",
+	// 	     set_pass, NULL, &opt_set_null,
+	// 	     "Password for bitcoin JSON-RPC server"),
+	// OPT_WITHOUT_ARG("--per-device-stats",
+	//		opt_set_bool, &want_per_device_stats,
+	// 		"Force verbose mode and output per-device statistics"),
+	// OPT_WITH_ARG("--pools",
+	// 		opt_set_bool, NULL, &opt_set_null, opt_hidden),
+	// OPT_WITHOUT_ARG("--protocol-dump|-P",
+	// 		opt_set_bool, &opt_protocol,
+	// 		"Verbose dump of protocol-level activities"),
 	OPT_WITH_ARG("--queue|-Q",
 		     set_int_0_to_9999, opt_show_intval, &opt_queue,
 		     "Maximum number of work items to have queued"),
 	OPT_WITHOUT_ARG("--quiet|-q",
 			opt_set_bool, &opt_quiet,
 			"Disable logging output, display status and errors"),
-	OPT_WITH_ARG("--quota|-U",
-		     set_quota, NULL, &opt_set_null,
-		     "quota;URL combination for server with load-balance strategy quotas"),
+	// OPT_WITH_ARG("--quota|-U",
+	// 	     set_quota, NULL, &opt_set_null,
+	// 	     "quota;URL combination for server with load-balance strategy quotas"),
 	OPT_WITHOUT_ARG("--real-quiet",
 			opt_set_bool, &opt_realquiet,
 			"Disable all output"),
-	OPT_WITH_ARG("--retries",
-		     set_null, NULL, &opt_set_null,
-		     opt_hidden),
-	OPT_WITH_ARG("--retry-pause",
-		     set_null, NULL, &opt_set_null,
-		     opt_hidden),
-	OPT_WITH_ARG("--rotate",
-		     set_rotate, NULL, &opt_set_null,
-		     "Change multipool strategy from failover to regularly rotate at N minutes"),
-	OPT_WITHOUT_ARG("--round-robin",
-		     set_rr, &pool_strategy,
-		     "Change multipool strategy from failover to round robin on failure"),
-#ifdef USE_FPGA_SERIAL
-	OPT_WITH_CBARG("--scan-serial|-S",
-		     add_serial, NULL, &opt_add_serial,
-		     "Serial port to probe for Serial FPGA Mining device"),
-#endif
-	OPT_WITH_ARG("--scan-time|-s",
-		     set_int_0_to_9999, opt_show_intval, &opt_scantime,
-		     "Upper bound on time spent scanning current work, in seconds"),
-	OPT_WITH_CBARG("--sched-start",
-		     set_sched_start, NULL, &opt_set_sched_start,
-		     "Set a time of day in HH:MM to start mining (a once off without a stop time)"),
-	OPT_WITH_CBARG("--sched-stop",
-		     set_sched_stop, NULL, &opt_set_sched_stop,
-		     "Set a time of day in HH:MM to stop mining (will quit without a start time)"),
-	OPT_WITH_CBARG("--sharelog",
-		     set_sharelog, NULL, &opt_set_sharelog,
-		     "Append share log to file"),
-	OPT_WITH_ARG("--shares",
-		     opt_set_intval, NULL, &opt_shares,
-		     "Quit after mining N shares (default: unlimited)"),
-	OPT_WITH_ARG("--socks-proxy",
-		     opt_set_charp, NULL, &opt_socks_proxy,
-		     "Set socks4 proxy (host:port)"),
-	OPT_WITH_ARG("--suggest-diff",
-		     opt_set_intval, NULL, &opt_suggest_diff,
-		     "Suggest miner difficulty for pool to user (default: none)"),
-#ifdef HAVE_SYSLOG_H
-	OPT_WITHOUT_ARG("--syslog",
-			opt_set_bool, &use_syslog,
-			"Use system log for output messages (default: standard error)"),
-#endif
+	// OPT_WITH_ARG("--retries",
+	// 	     set_null, NULL, &opt_set_null,
+	// 	     opt_hidden),
+	// OPT_WITH_ARG("--retry-pause",
+	// 	     set_null, NULL, &opt_set_null,
+	// 	     opt_hidden),
+	// OPT_WITH_ARG("--rotate",
+	// 	     set_rotate, NULL, &opt_set_null,
+	// 	     "Change multipool strategy from failover to regularly rotate at N minutes"),
+	// OPT_WITHOUT_ARG("--round-robin",
+	// 	     set_rr, &pool_strategy,
+	// 	     "Change multipool strategy from failover to round robin on failure"),
+// #ifdef USE_FPGA_SERIAL
+// 	OPT_WITH_CBARG("--scan-serial|-S",
+// 		     add_serial, NULL, &opt_add_serial,
+// 		     "Serial port to probe for Serial FPGA Mining device"),
+// #endif
+// 	OPT_WITH_ARG("--scan-time|-s",
+// 		     set_int_0_to_9999, opt_show_intval, &opt_scantime,
+// 		     "Upper bound on time spent scanning current work, in seconds"),
+// 	OPT_WITH_CBARG("--sched-start",
+// 		     set_sched_start, NULL, &opt_set_sched_start,
+// 		     "Set a time of day in HH:MM to start mining (a once off without a stop time)"),
+// 	OPT_WITH_CBARG("--sched-stop",
+// 		     set_sched_stop, NULL, &opt_set_sched_stop,
+// 		     "Set a time of day in HH:MM to stop mining (will quit without a start time)"),
+// 	OPT_WITH_CBARG("--sharelog",
+// 		     set_sharelog, NULL, &opt_set_sharelog,
+// 		     "Append share log to file"),
+// 	OPT_WITH_ARG("--shares",
+// 		     opt_set_intval, NULL, &opt_shares,
+// 		     "Quit after mining N shares (default: unlimited)"),
+// 	OPT_WITH_ARG("--socks-proxy",
+// 		     opt_set_charp, NULL, &opt_socks_proxy,
+// 		     "Set socks4 proxy (host:port)"),
+// 	OPT_WITH_ARG("--suggest-diff",
+// 		     opt_set_intval, NULL, &opt_suggest_diff,
+// 		     "Suggest miner difficulty for pool to user (default: none)"),
+// #ifdef HAVE_SYSLOG_H
+// 	OPT_WITHOUT_ARG("--syslog",
+// 			opt_set_bool, &use_syslog,
+// 			"Use system log for output messages (default: standard error)"),
+// #endif
 	OPT_WITHOUT_ARG("--text-only|-T",
 			opt_set_invbool, &use_curses,
-#ifdef HAVE_CURSES
-			"Disable ncurses formatted screen output"
-#else
 			opt_hidden
-#endif
 	),
-	OPT_WITH_ARG("--url|-o",
-		     set_url, NULL, &opt_set_null,
-		     "URL for bitcoin JSON-RPC server"),
-#ifdef USE_USBUTILS
-	OPT_WITH_ARG("--usb",
-		     opt_set_charp, NULL, &opt_usb_select,
-		     "USB device selection"),
-	OPT_WITH_ARG("--usb-dump",
-		     set_int_0_to_10, opt_show_intval, &opt_usbdump,
-		     opt_hidden),
-	OPT_WITHOUT_ARG("--usb-list-all",
-			opt_set_bool, &opt_usb_list_all,
-			opt_hidden),
-#endif
-	OPT_WITH_ARG("--user|-u",
-		     set_user, NULL, &opt_set_null,
-		     "Username for bitcoin JSON-RPC server"),
-	OPT_WITH_ARG("--userpass|-O",
-		     set_userpass, NULL, &opt_set_null,
-		     "Username:Password pair for bitcoin JSON-RPC server"),
+	// OPT_WITH_ARG("--url|-o",
+	// 	     set_url, NULL, &opt_set_null,
+	// 	     "URL for bitcoin JSON-RPC server"),
+// #ifdef USE_USBUTILS
+// 	OPT_WITH_ARG("--usb",
+// 		     opt_set_charp, NULL, &opt_usb_select,
+// 		     "USB device selection"),
+// 	OPT_WITH_ARG("--usb-dump",
+// 		     set_int_0_to_10, opt_show_intval, &opt_usbdump,
+// 		     opt_hidden),
+// 	OPT_WITHOUT_ARG("--usb-list-all",
+// 			opt_set_bool, &opt_usb_list_all,
+// 			opt_hidden),
+// #endif
+// 	OPT_WITH_ARG("--user|-u",
+// 		     set_user, NULL, &opt_set_null,
+// 		     "Username for bitcoin JSON-RPC server"),
+// 	OPT_WITH_ARG("--userpass|-O",
+// 		     set_userpass, NULL, &opt_set_null,
+// 		     "Username:Password pair for bitcoin JSON-RPC server"),
 	OPT_WITHOUT_ARG("--verbose",
 			opt_set_bool, &opt_log_output,
 			"Log verbose output to stderr as well as status output"),
@@ -1485,12 +1212,6 @@ static char *load_config(const char *arg, void __maybe_unused *unused)
 	return parse_config(config, true);
 }
 
-static char *set_default_config(const char *arg)
-{
-	opt_set_charp(arg, &default_config);
-
-	return NULL;
-}
 
 void default_save_file(char *filename);
 
@@ -1518,33 +1239,32 @@ static char *opt_verusage_and_exit(const char *extra)
 	exit(0);
 }
 
-#if defined(USE_USBUTILS)
 char *display_devs(int *ndevs)
 {
 	*ndevs = 0;
 	usb_all(0);
 	exit(*ndevs);
 }
-#endif
+
 
 /* These options are available from commandline only */
 static struct opt_table opt_cmdline_table[] = {
-	OPT_WITH_ARG("--config|-c",
-		     load_config, NULL, &opt_set_null,
-		     "Load a JSON-format configuration file\n"
-		     "See example.conf for an example configuration."),
-	OPT_WITH_ARG("--default-config",
-		     set_default_config, NULL, &opt_set_null,
-		     "Specify the filename of the default config file\n"
-		     "Loaded at start and used when saving without a name."),
+	// OPT_WITH_ARG("--config|-c",
+	// 	     load_config, NULL, &opt_set_null,
+	// 	     "Load a JSON-format configuration file\n"
+	// 	     "See example.conf for an example configuration."),
+	// OPT_WITH_ARG("--default-config",
+	// 	     set_default_config, NULL, &opt_set_null,
+	// 	     "Specify the filename of the default config file\n"
+	// 	     "Loaded at start and used when saving without a name."),
 	OPT_WITHOUT_ARG("--help|-h",
 			opt_verusage_and_exit, NULL,
 			"Print this message"),
-#if defined(USE_USBUTILS)
-	OPT_WITHOUT_ARG("--ndevs|-n",
-			display_devs, &nDevs,
-			"Display all USB devices and exit"),
-#endif
+// #if defined(USE_USBUTILS)
+// 	OPT_WITHOUT_ARG("--ndevs|-n",
+// 			display_devs, &nDevs,
+// 			"Display all USB devices and exit"),
+// #endif
 	OPT_WITHOUT_ARG("--version|-V",
 			opt_version_and_exit, packagename,
 			"Display version and exit"),
@@ -1645,16 +1365,6 @@ static int __total_staged(void)
 	return HASH_COUNT(staged_work);
 }
 
-static int total_staged(void)
-{
-	int ret;
-
-	mutex_lock(stgd_lock);
-	ret = __total_staged();
-	mutex_unlock(stgd_lock);
-
-	return ret;
-}
 
 double total_secs = 1.0;
 double last_total_secs = 1.0;
@@ -6071,73 +5781,6 @@ bool add_pool_details(struct pool *pool, bool live, char *url, char *user, char 
 	return true;
 }
 
-// TODO : remove
-static void fork_monitor()
-{
-	// Make a pipe: [readFD, writeFD]
-	int pfd[2];
-	int r = pipe(pfd);
-
-	if (r < 0) {
-		perror("pipe - failed to create pipe for --monitor");
-		exit(1);
-	}
-
-	// Make stderr write end of pipe
-	fflush(stderr);
-	r = dup2(pfd[1], 2);
-	if (r < 0) {
-		perror("dup2 - failed to alias stderr to write end of pipe for --monitor");
-		exit(1);
-	}
-	r = close(pfd[1]);
-	if (r < 0) {
-		perror("close - failed to close write end of pipe for --monitor");
-		exit(1);
-	}
-
-	// Don't allow a dying monitor to kill the main process
-	sighandler_t sr0 = signal(SIGPIPE, SIG_IGN);
-	sighandler_t sr1 = signal(SIGPIPE, SIG_IGN);
-	if (SIG_ERR == sr0 || SIG_ERR == sr1) {
-		perror("signal - failed to edit signal mask for --monitor");
-		exit(1);
-	}
-
-	// Fork a child process
-	forkpid = fork();
-	if (forkpid < 0) {
-		perror("fork - failed to fork child process for --monitor");
-		exit(1);
-	}
-
-	// Child: launch monitor command
-	if (0 == forkpid) {
-		// Make stdin read end of pipe
-		r = dup2(pfd[0], 0);
-		if (r < 0) {
-			perror("dup2 - in child, failed to alias read end of pipe to stdin for --monitor");
-			exit(1);
-		}
-		close(pfd[0]);
-		if (r < 0) {
-			perror("close - in child, failed to close read end of  pipe for --monitor");
-			exit(1);
-		}
-
-		// Launch user specified command
-		execl("/bin/bash", "/bin/bash", "-c", opt_stderr_cmd, (char*)NULL);
-		perror("execl - in child failed to exec user specified command for --monitor");
-		exit(1);
-	}
-
-	// Parent: clean up unused fds and bail
-	r = close(pfd[0]);
-	if (r < 0) {
-		perror("close - failed to close read end of pipe for --monitor");
-		exit(1);
-	}
-}
 
 
 static int cgminer_id_count = 0;
@@ -6544,18 +6187,13 @@ int main(int argc, char *argv[])
 	g_logfile_enable = false;
 	strcpy(g_logfile_path, "cgminer.log");
 	strcpy(g_logfile_openflag, "a+");
-	/* This dangerous functions tramples random dynamically allocated
-	 * variables so do it before anything at all */
-	if (unlikely(curl_global_init(CURL_GLOBAL_ALL)))
-		early_quit(1, "Failed to curl_global_init");
+	
 
-# ifdef __linux
 	/* If we're on a small lowspec platform with only one CPU, we should
 	 * yield after dropping a lock to allow a thread waiting for it to be
 	 * able to get CPU time to grab the lock. */
 	if (sysconf(_SC_NPROCESSORS_ONLN) == 1)
 		selective_yield = &sched_yield;
-#endif
 
 #if LOCK_TRACKING
 	// Must be first
@@ -6607,11 +6245,8 @@ int main(int argc, char *argv[])
 	sigemptyset(&handler.sa_mask);
 	sigaction(SIGTERM, &handler, &termhandler);
 	sigaction(SIGINT, &handler, &inthandler);
-#ifndef WIN32
 	signal(SIGPIPE, SIG_IGN);
-#else
-	timeBeginPeriod(1);
-#endif
+
 	opt_kernel_path = alloca(PATH_MAX);
 	strcpy(opt_kernel_path, CGMINER_PREFIX);
 	cgminer_path = alloca(PATH_MAX);
