@@ -8,9 +8,7 @@
 #include <sys/time.h>
 #include <pthread.h>
 #include <jansson.h>
-#ifdef HAVE_LIBCURL
-#include <curl/curl.h>
-#else
+
 typedef char CURL;
 extern char *curly;
 #define curl_easy_init(curl) (curly)
@@ -18,7 +16,7 @@ extern char *curly;
 #define curl_global_cleanup() {}
 #define CURL_GLOBAL_ALL 0
 #define curl_global_init(X) (0)
-#endif
+
 #include <sched.h>
 
 #include "elist.h"
@@ -26,14 +24,11 @@ extern char *curly;
 #include "logging.h"
 #include "util.h"
 #include <sys/types.h>
-#ifndef WIN32
+
 # include <sys/socket.h>
 # include <netdb.h>
-#endif
 
-#ifdef USE_USBUTILS
 #include <semaphore.h>
-#endif
 
 #ifdef STDC_HEADERS
 # include <stdlib.h>
@@ -65,22 +60,7 @@ void *alloca (size_t);
 # endif
 #endif
 
-#ifdef __MINGW32__
-#include <windows.h>
-#include <io.h>
-static inline int fsync (int fd)
-{
-	return (FlushFileBuffers ((HANDLE) _get_osfhandle (fd))) ? 0 : -1;
-}
 
-#ifndef EWOULDBLOCK
-# define EWOULDBLOCK EAGAIN
-#endif
-
-#ifndef MSG_DONTWAIT
-# define MSG_DONTWAIT 0x1000000
-#endif
-#endif /* __MINGW32__ */
 
 #if defined (__linux)
  #ifndef LINUX
@@ -88,40 +68,9 @@ static inline int fsync (int fd)
  #endif
 #endif
 
-#ifdef WIN32
-  #ifndef timersub
-    #define timersub(a, b, result)                     \
-    do {                                               \
-      (result)->tv_sec = (a)->tv_sec - (b)->tv_sec;    \
-      (result)->tv_usec = (a)->tv_usec - (b)->tv_usec; \
-      if ((result)->tv_usec < 0) {                     \
-        --(result)->tv_sec;                            \
-        (result)->tv_usec += 1000000;                  \
-      }                                                \
-    } while (0)
-  #endif
- #ifndef timeradd
- # define timeradd(a, b, result)			      \
-   do {							      \
-    (result)->tv_sec = (a)->tv_sec + (b)->tv_sec;	      \
-    (result)->tv_usec = (a)->tv_usec + (b)->tv_usec;	      \
-    if ((result)->tv_usec >= 1000000)			      \
-      {							      \
-	++(result)->tv_sec;				      \
-	(result)->tv_usec -= 1000000;			      \
-      }							      \
-   } while (0)
- #endif
-#endif
-
-
-#ifdef USE_USBUTILS
   #include <libusb.h>
-#endif
-
-#ifdef USE_USBUTILS
   #include "usbutils.h"
-#endif
+
 
 #if (!defined(WIN32) && ((__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 3))) \
     || (defined(WIN32) && ((__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 7)))
@@ -455,38 +404,14 @@ struct cgpu_info {
 	struct cg_usb_info usbinfo;
 	bool blacklisted;
 #endif
-#if defined(USE_AVALON) || defined(USE_AVALON2)
-	struct work **works;
-	int work_array;
-	int queued;
-	int results;
-#endif
-#ifdef USE_BITMAIN
+
+// bitmain
 	int device_fd;
 	struct work **works;
 	int work_array;
 	int queued;
 	int results;
-#endif
-#ifdef USE_MODMINER
-	char fpgaid;
-	unsigned char clock;
-	pthread_mutex_t *modminer_mutex;
-#endif
-#ifdef USE_BITFORCE
-	struct timeval work_start_tv;
-	unsigned int wait_ms;
-	unsigned int sleep_ms;
-	double avg_wait_f;
-	unsigned int avg_wait_d;
-	uint32_t nonces;
-	bool nonce_range;
-	bool polling;
-	bool flash_led;
-#endif /* USE_BITFORCE */
-#if defined(USE_BITFORCE) || defined(USE_BFLSC)
-	pthread_mutex_t device_mutex;
-#endif /* USE_BITFORCE || USE_BFLSC */
+
 	enum dev_enable deven;
 	int accepted;
 	int rejected;
@@ -1003,7 +928,7 @@ extern bool opt_work_update;
 extern bool opt_protocol;
 extern bool have_longpoll;
 extern char *opt_kernel_path;
-extern char *opt_socks_proxy;
+extern const char *opt_socks_proxy;
 extern int opt_suggest_diff;
 extern char *cgminer_path;
 extern bool opt_fail_only;
@@ -1011,51 +936,27 @@ extern bool opt_lowmem;
 extern bool opt_autofan;
 extern bool opt_autoengine;
 extern bool use_curses;
-extern char *opt_logwork_path;
-extern char *opt_logwork_asicnum;
-extern bool opt_logwork_diff;
-extern char *opt_api_allow;
-extern bool opt_api_mcast;
-extern char *opt_api_mcast_addr;
-extern char *opt_api_mcast_code;
-extern char *opt_api_mcast_des;
-extern int opt_api_mcast_port;
-extern char *opt_api_groups;
-extern char *opt_api_description;
-extern int opt_api_port;
-extern char *opt_api_host;
-extern bool opt_api_listen;
-extern bool opt_api_network;
-extern bool opt_delaynet;
+extern const char *opt_logwork_path;
+extern const char *opt_logwork_asicnum;
+extern const bool opt_logwork_diff;
+extern const char *opt_api_allow;
+extern const bool opt_api_mcast;
+extern const char *opt_api_mcast_addr;
+extern const char *opt_api_mcast_code;
+extern const char *opt_api_mcast_des;
+extern const int opt_api_mcast_port;
+extern const char *opt_api_groups;
+extern const char *opt_api_description;
+extern const int opt_api_port;
+extern const char *opt_api_host;
+extern const bool opt_api_listen;
+extern const bool opt_api_network;
+extern const bool opt_delaynet;
 extern time_t last_getwork;
 extern bool opt_restart;
-#ifdef USE_ICARUS
-extern char *opt_icarus_options;
-extern char *opt_icarus_timing;
-extern float opt_anu_freq;
-extern float opt_au3_freq;
-extern int opt_au3_volt;
-extern float opt_rock_freq;
-#endif
 extern bool opt_worktime;
-#ifdef USE_AVALON
-extern char *opt_avalon_options;
-extern char *opt_bitburner_fury_options;
-#endif
-#ifdef USE_KLONDIKE
-extern char *opt_klondike_options;
-#endif
-#ifdef USE_DRILLBIT
-extern char *opt_drillbit_options;
-extern char *opt_drillbit_auto;
-#endif
-#ifdef USE_BAB
-extern char *opt_bab_options;
-#endif
-#ifdef USE_BITMINE_A1
-extern char *opt_bitmine_a1_options;
-#endif
-#ifdef USE_BITMAIN
+
+// bitmain
 extern char *opt_bitmain_options;
 extern bool opt_bitmain_hwerror;
 extern bool opt_bitmain_checkall;
@@ -1066,45 +967,11 @@ extern bool opt_bitmain_nobeeper;
 extern bool opt_bitmain_notempoverctrl;
 extern bool opt_bitmain_homemode;
 extern bool opt_bitmain_new_cmd_type_vil;
-#endif
-#ifdef USE_BMSC
-extern char *opt_bmsc_options;
-extern char *opt_bmsc_timing;
-extern bool opt_bmsc_gray;
-extern char *opt_bmsc_bandops;
-extern char *opt_bmsc_voltage;
-extern bool opt_bmsc_bootstart;
-extern char *opt_bmsc_freq;
-extern char *opt_bmsc_rdreg;
-extern bool opt_bmsc_rdworktest;
-#endif
-#ifdef USE_MINION
-extern int opt_minion_chipreport;
-extern char *opt_minion_cores;
-extern bool opt_minion_extra;
-extern char *opt_minion_freq;
-extern int opt_minion_freqchange;
-extern int opt_minion_freqpercent;
-extern bool opt_minion_idlecount;
-extern int opt_minion_ledcount;
-extern int opt_minion_ledlimit;
-extern bool opt_minion_noautofreq;
-extern bool opt_minion_overheat;
-extern int opt_minion_spidelay;
-extern char *opt_minion_spireset;
-extern int opt_minion_spisleep;
-extern int opt_minion_spiusec;
-extern char *opt_minion_temp;
-#endif
-#ifdef USE_USBUTILS
+
 extern char *opt_usb_select;
 extern int opt_usbdump;
 extern bool opt_usb_list_all;
 extern cgsem_t usb_resource_sem;
-#endif
-#ifdef USE_BITFORCE
-extern bool opt_bfl_noncerange;
-#endif
 extern int swork_id;
 
 #if LOCK_TRACKING
@@ -1114,12 +981,7 @@ extern pthread_mutex_t lockstat_lock;
 extern pthread_rwlock_t netacc_lock;
 
 extern const uint32_t sha256_init_state[];
-#ifdef HAVE_LIBCURL
-extern json_t *json_web_config(const char *url);
-extern json_t *json_rpc_call(CURL *curl, const char *url, const char *userpass,
-			     const char *rpc_req, bool, bool, int *,
-			     struct pool *pool, bool);
-#endif
+
 extern const char *proxytype(proxytypes_t proxytype);
 extern char *get_proxy(char *url, struct pool *pool);
 extern void __bin2hex(char *s, const unsigned char *p, size_t len);
@@ -1458,33 +1320,7 @@ struct work {
 	char		getwork_mode;
 };
 
-#ifdef USE_MODMINER 
-struct modminer_fpga_state {
-	bool work_running;
-	struct work running_work;
-	struct timeval tv_workstart;
-	uint32_t hashes;
 
-	char next_work_cmd[46];
-	char fpgaid;
-
-	bool overheated;
-	bool new_work;
-
-	uint32_t shares;
-	uint32_t shares_last_hw;
-	uint32_t hw_errors;
-	uint32_t shares_to_good;
-	uint32_t timeout_fail;
-	uint32_t success_more;
-	struct timeval last_changed;
-	struct timeval last_nonce;
-	struct timeval first_work;
-	bool death_stage_one;
-	bool tried_two_byte_temp;
-	bool one_byte_temp;
-};
-#endif
 
 #define TAILBUFSIZ 64
 
@@ -1649,8 +1485,7 @@ extern void dupalloc(struct cgpu_info *cgpu, int timelimit);
 extern void dupcounters(struct cgpu_info *cgpu, uint64_t *checked, uint64_t *dups);
 extern bool isdupnonce(struct cgpu_info *cgpu, struct work *work, uint32_t nonce);
 
-#if defined(USE_BITMAIN) || defined(USE_BMSC)
 extern void rev(unsigned char *s, size_t l);
 extern int check_asicnum(int asic_num, unsigned char nonce);
-#endif
+
 #endif /* __MINER_H__ */

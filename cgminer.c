@@ -25,10 +25,7 @@
 #include <assert.h>
 #include <signal.h>
 #include <limits.h>
-
-#ifdef USE_USBUTILS
 #include <semaphore.h>
-#endif
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -44,14 +41,11 @@ char *curly = ":D";
 #include "compat.h"
 #include "miner.h"
 #include "bench_block.h"
-#ifdef USE_USBUTILS
 #include "usbutils.h"
-#endif
 
-
-	#include <errno.h>
-	#include <fcntl.h>
-	#include <sys/wait.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/wait.h>
 
 
 #include "driver-bitmain.h"
@@ -77,31 +71,8 @@ int g_logwork_asicnum = 0;
 
 bool opt_work_update;
 bool opt_protocol;
-static struct benchfile_layout {
-	int length;
-	char *name;
-} benchfile_data[] = {
-	{ 1,	"Version" },
-	{ 64,	"MerkleRoot" },
-	{ 64,	"PrevHash" },
-	{ 8,	"DifficultyBits" },
-	{ 10,	"NonceTime" } // 10 digits
-};
-enum benchwork {
-	BENCHWORK_VERSION = 0,
-	BENCHWORK_MERKLEROOT,
-	BENCHWORK_PREVHASH,
-	BENCHWORK_DIFFBITS,
-	BENCHWORK_NONCETIME,
-	BENCHWORK_COUNT
-};
 
-static char *opt_benchfile;
-static bool opt_benchfile_display;
-static FILE *benchfile_in;
-static int benchfile_line;
-static int benchfile_work;
-static bool opt_benchmark;
+
 bool have_longpoll;
 bool want_per_device_stats;
 bool use_syslog;
@@ -125,7 +96,6 @@ bool opt_restart = true;
 bool opt_nogpu;
 
 struct list_head scan_devices;
-static bool opt_display_devs;
 int total_devices;
 int zombie_devs;
 static int most_devices;
@@ -138,7 +108,7 @@ bool use_curses = false;
 static bool opt_widescreen;
 static bool alt_status;
 static bool switch_status;
-static bool opt_submit_stale = true;
+const static bool opt_submit_stale = true;
 static int opt_shares;
 bool opt_fail_only;
 static bool opt_fix_protocol;
@@ -148,42 +118,39 @@ bool opt_autoengine;
 bool opt_noadl;
 char *opt_version_path = NULL;
 char *opt_logfile_path = NULL;
-char *opt_logfile_openflag = NULL;
-char *opt_logwork_path = NULL;
-char *opt_logwork_asicnum = NULL;
-bool opt_logwork_diff = false;
-char *opt_api_allow = NULL;
-char *opt_api_groups;
-char *opt_api_description = PACKAGE_STRING;
-int opt_api_port = 4028;
-char *opt_api_host = API_LISTEN_ADDR;
-bool opt_api_listen;
-bool opt_api_mcast;
-char *opt_api_mcast_addr = API_MCAST_ADDR;
-char *opt_api_mcast_code = API_MCAST_CODE;
-char *opt_api_mcast_des = "";
-int opt_api_mcast_port = 4028;
-bool opt_api_network;
-bool opt_delaynet;
-bool opt_disable_pool;
+const char *opt_logfile_openflag = NULL;
+const char *opt_logwork_path = NULL;
+const char *opt_logwork_asicnum = NULL;
+const bool opt_logwork_diff = false;
+const char *opt_api_allow = NULL;
+const char *opt_api_groups;
+const char *opt_api_description = PACKAGE_STRING;
+const int opt_api_port = 4028;
+const char *opt_api_host = API_LISTEN_ADDR;
+const bool opt_api_listen;
+const bool opt_api_mcast;
+const char *opt_api_mcast_addr = API_MCAST_ADDR;
+const char *opt_api_mcast_code = API_MCAST_CODE;
+const char *opt_api_mcast_des = "";
+const int opt_api_mcast_port = 4028;
+const bool opt_api_network;
+const bool opt_delaynet;
+const bool opt_disable_pool;
 static bool no_work;
 
 bool opt_worktime;
 
-#ifdef USE_BITMAIN
 char *opt_bitmain_options = NULL;
 char *opt_bitmain_freq = NULL;
 char *opt_bitmain_voltage = NULL;
-#endif
 
-#ifdef USE_USBUTILS
 char *opt_usb_select = NULL;
 int opt_usbdump = -1;
 bool opt_usb_list_all;
 cgsem_t usb_resource_sem;
 static pthread_t usb_poll_thread;
 static bool usb_polling;
-#endif
+
 
 char *opt_kernel_path;
 char *cgminer_path;
@@ -198,10 +165,10 @@ static int watchdog_thr_id;
 
 int gpur_thr_id;
 static int api_thr_id;
-#ifdef USE_USBUTILS
+
 static int usbres_thr_id;
 static int hotplug_thr_id;
-#endif
+
 static int total_control_threads;
 bool hotplug_mode;
 static int new_devices;
@@ -269,13 +236,8 @@ static struct pool *currentpool = NULL;
 int total_pools, enabled_pools;
 enum pool_strategy pool_strategy = POOL_FAILOVER;
 int opt_rotate_period;
-// static int total_urls, total_users, total_passes, total_userpasses;
 
-static
-#ifndef HAVE_CURSES
-const
-#endif
-bool curses_active;
+static const bool curses_active;
 
 /* Protected by ch_lock */
 char current_hash[68];
@@ -314,10 +276,10 @@ struct stratum_share {
 
 static struct stratum_share *stratum_shares = NULL;
 
-char *opt_socks_proxy = NULL;
+const char *opt_socks_proxy = NULL;
 int opt_suggest_diff;
 static const char def_conf[] = "cgminer.conf";
-static char *default_config;
+static const char *default_config;
 static bool config_loaded;
 static int include_count;
 #define JSON_INCLUDE_CONF "include"
@@ -834,70 +796,12 @@ static char *set_bitmain_voltage(const char *arg)
 
 
 
-static char *set_null(const char __maybe_unused *arg)
-{
-	return NULL;
-}
-
 /* These options are available from config file or commandline */
 static struct opt_table opt_config_table[] = {
-
-
-	// OPT_WITH_ARG("--version-file",
-	// 		 set_version_path, NULL, opt_hidden,
-	// 	     "Set miner version file"),
-	// OPT_WITH_ARG("--logfile-openflag",
-	// 		set_logfile_openflag, NULL, opt_hidden,
-	// 		"Set log file open flag, default: a+"),
-	// OPT_WITH_ARG("--logwork",
-	// 		set_logwork_path, NULL, opt_hidden,
-	// 		"Set log work file path, following: minertext"),
-	// OPT_WITH_ARG("--logwork-asicnum",
-	// 		set_logwork_asicnum, NULL, opt_hidden,
-	// 		"Set log work asic num, following: 1, 32, 64"),
-	// OPT_WITHOUT_ARG("--logwork-diff",
-	// 		opt_set_bool, &opt_logwork_diff,
-	// 		"Allow log work diff"),
 	OPT_WITH_ARG("--logfile",
 				set_logfile_path, NULL, opt_hidden,
 				"Set log file, default: cgminer.log"),	
-	// OPT_WITH_ARG("--api-allow",
-	// 	     opt_set_charp, NULL, &opt_api_allow,
-	// 	     "Allow API access only to the given list of [G:]IP[/Prefix] addresses[/subnets]"),
-	// OPT_WITH_ARG("--api-description",
-	// 	     opt_set_charp, NULL, &opt_api_description,
-	// 	     "Description placed in the API status header, default: cgminer version"),
-	// OPT_WITH_ARG("--api-groups",
-	// 	     opt_set_charp, NULL, &opt_api_groups,
-	// 	     "API one letter groups G:cmd:cmd[,P:cmd:*...] defining the cmds a groups can use"),
-	// OPT_WITHOUT_ARG("--api-listen",
-	// 		opt_set_bool, &opt_api_listen,
-	// 		"Enable API, default: disabled"),
-	// OPT_WITHOUT_ARG("--api-mcast",
-	// 		opt_set_bool, &opt_api_mcast,
-	// 		"Enable API Multicast listener, default: disabled"),
-	// OPT_WITH_ARG("--api-mcast-addr",
-	// 	     opt_set_charp, NULL, &opt_api_mcast_addr,
-	// 	     "API Multicast listen address"),
-	// OPT_WITH_ARG("--api-mcast-code",
-	// 	     opt_set_charp, NULL, &opt_api_mcast_code,
-	// 	     "Code expected in the API Multicast message, don't use '-'"),
-	// OPT_WITH_ARG("--api-mcast-des",
-	// 	     opt_set_charp, NULL, &opt_api_mcast_des,
-	// 	     "Description appended to the API Multicast reply, default: ''"),
-	// OPT_WITH_ARG("--api-mcast-port",
-	// 	     set_int_1_to_65535, opt_show_intval, &opt_api_mcast_port,
-	// 	     "API Multicast listen port"),
-	// OPT_WITHOUT_ARG("--api-network",
-	// 		opt_set_bool, &opt_api_network,
-	// 		"Allow API (if enabled) to listen on/for any address, default: only 127.0.0.1"),
-	// OPT_WITH_ARG("--api-port",
-	// 	     set_int_1_to_65535, opt_show_intval, &opt_api_port,
-	// 	     "Port number of miner API"),
-	// OPT_WITH_ARG("--api-host",
-	// 	     opt_set_charp, NULL, &opt_api_host,
-	// 	     "Specify API listen address, default: 0.0.0.0"),
-
+	
 // bitmain stuff
 	OPT_WITH_ARG("--bitmain-dev",
 			set_bitmain_dev, NULL, NULL,
@@ -946,116 +850,22 @@ static struct opt_table opt_config_table[] = {
 		     "Set bitmain target temperature"),
 
 
-	// OPT_WITH_ARG("--hotplug",
-	// 	     set_int_0_to_9999, NULL, &hotplug_time,
-	// 	     "Seconds between hotplug checks (0 means never check)"
-	// 	    ),
-
-
-	// OPT_WITH_ARG("--monitor|-m",
-	// 	     opt_set_charp, NULL, &opt_stderr_cmd,
-	// 	     "Use custom pipe cmd for output messages"),
-
-	// OPT_WITHOUT_ARG("--net-delay",
-	// 		opt_set_bool, &opt_delaynet,
-	// 		"Impose small delays in networking to not overload slow routers"),
-	// OPT_WITHOUT_ARG("--no-pool-disable",
-	// 		opt_set_invbool, &opt_disable_pool,
-	// 		opt_hidden),
-	// OPT_WITHOUT_ARG("--no-submit-stale",
-	// 		opt_set_invbool, &opt_submit_stale,
-	// 	        "Don't submit shares if they are detected as stale"),
-
-	// OPT_WITH_ARG("--pass|-p",
-	// 	     set_pass, NULL, &opt_set_null,
-	// 	     "Password for bitcoin JSON-RPC server"),
-	// OPT_WITHOUT_ARG("--per-device-stats",
-	//		opt_set_bool, &want_per_device_stats,
-	// 		"Force verbose mode and output per-device statistics"),
-	// OPT_WITH_ARG("--pools",
-	// 		opt_set_bool, NULL, &opt_set_null, opt_hidden),
-	// OPT_WITHOUT_ARG("--protocol-dump|-P",
-	// 		opt_set_bool, &opt_protocol,
-	// 		"Verbose dump of protocol-level activities"),
 	OPT_WITH_ARG("--queue|-Q",
 		     set_int_0_to_9999, opt_show_intval, &opt_queue,
 		     "Maximum number of work items to have queued"),
 	OPT_WITHOUT_ARG("--quiet|-q",
 			opt_set_bool, &opt_quiet,
 			"Disable logging output, display status and errors"),
-	// OPT_WITH_ARG("--quota|-U",
-	// 	     set_quota, NULL, &opt_set_null,
-	// 	     "quota;URL combination for server with load-balance strategy quotas"),
 	OPT_WITHOUT_ARG("--real-quiet",
 			opt_set_bool, &opt_realquiet,
 			"Disable all output"),
-	// OPT_WITH_ARG("--retries",
-	// 	     set_null, NULL, &opt_set_null,
-	// 	     opt_hidden),
-	// OPT_WITH_ARG("--retry-pause",
-	// 	     set_null, NULL, &opt_set_null,
-	// 	     opt_hidden),
-	// OPT_WITH_ARG("--rotate",
-	// 	     set_rotate, NULL, &opt_set_null,
-	// 	     "Change multipool strategy from failover to regularly rotate at N minutes"),
-	// OPT_WITHOUT_ARG("--round-robin",
-	// 	     set_rr, &pool_strategy,
-	// 	     "Change multipool strategy from failover to round robin on failure"),
-// #ifdef USE_FPGA_SERIAL
-// 	OPT_WITH_CBARG("--scan-serial|-S",
-// 		     add_serial, NULL, &opt_add_serial,
-// 		     "Serial port to probe for Serial FPGA Mining device"),
-// #endif
-// 	OPT_WITH_ARG("--scan-time|-s",
-// 		     set_int_0_to_9999, opt_show_intval, &opt_scantime,
-// 		     "Upper bound on time spent scanning current work, in seconds"),
-// 	OPT_WITH_CBARG("--sched-start",
-// 		     set_sched_start, NULL, &opt_set_sched_start,
-// 		     "Set a time of day in HH:MM to start mining (a once off without a stop time)"),
-// 	OPT_WITH_CBARG("--sched-stop",
-// 		     set_sched_stop, NULL, &opt_set_sched_stop,
-// 		     "Set a time of day in HH:MM to stop mining (will quit without a start time)"),
-// 	OPT_WITH_CBARG("--sharelog",
-// 		     set_sharelog, NULL, &opt_set_sharelog,
-// 		     "Append share log to file"),
-// 	OPT_WITH_ARG("--shares",
-// 		     opt_set_intval, NULL, &opt_shares,
-// 		     "Quit after mining N shares (default: unlimited)"),
-// 	OPT_WITH_ARG("--socks-proxy",
-// 		     opt_set_charp, NULL, &opt_socks_proxy,
-// 		     "Set socks4 proxy (host:port)"),
-// 	OPT_WITH_ARG("--suggest-diff",
-// 		     opt_set_intval, NULL, &opt_suggest_diff,
-// 		     "Suggest miner difficulty for pool to user (default: none)"),
-// #ifdef HAVE_SYSLOG_H
-// 	OPT_WITHOUT_ARG("--syslog",
-// 			opt_set_bool, &use_syslog,
-// 			"Use system log for output messages (default: standard error)"),
-// #endif
+	OPT_WITHOUT_ARG("--debug|-D",
+		     enable_debug, &opt_debug,
+		     "Enable debug output"),
 	OPT_WITHOUT_ARG("--text-only|-T",
 			opt_set_invbool, &use_curses,
 			opt_hidden
 	),
-	// OPT_WITH_ARG("--url|-o",
-	// 	     set_url, NULL, &opt_set_null,
-	// 	     "URL for bitcoin JSON-RPC server"),
-// #ifdef USE_USBUTILS
-// 	OPT_WITH_ARG("--usb",
-// 		     opt_set_charp, NULL, &opt_usb_select,
-// 		     "USB device selection"),
-// 	OPT_WITH_ARG("--usb-dump",
-// 		     set_int_0_to_10, opt_show_intval, &opt_usbdump,
-// 		     opt_hidden),
-// 	OPT_WITHOUT_ARG("--usb-list-all",
-// 			opt_set_bool, &opt_usb_list_all,
-// 			opt_hidden),
-// #endif
-// 	OPT_WITH_ARG("--user|-u",
-// 		     set_user, NULL, &opt_set_null,
-// 		     "Username for bitcoin JSON-RPC server"),
-// 	OPT_WITH_ARG("--userpass|-O",
-// 		     set_userpass, NULL, &opt_set_null,
-// 		     "Username:Password pair for bitcoin JSON-RPC server"),
 	OPT_WITHOUT_ARG("--verbose",
 			opt_set_bool, &opt_log_output,
 			"Log verbose output to stderr as well as status output"),
@@ -1181,12 +991,6 @@ static char *load_config(const char *arg, void __maybe_unused *unused)
 	json_t *config;
 	char *json_error;
 	size_t siz;
-
-#ifdef HAVE_LIBCURL
-	if (strncasecmp(arg, conf_web1, sizeof(conf_web1)-1) == 0 ||
-	    strncasecmp(arg, conf_web2, sizeof(conf_web2)-1) == 0)
-		return load_web_config(arg);
-#endif
 
 	if (!cnfbuf)
 		cnfbuf = strdup(arg);
@@ -1866,171 +1670,7 @@ static void calc_diff(struct work *work, double known)
 	}
 }
 
-static unsigned char bench_hidiff_bins[16][160];
-static unsigned char bench_lodiff_bins[16][160];
-static unsigned char bench_target[32];
 
-/* Iterate over the lo and hi diff benchmark work items such that we find one
- * diff 32+ share every 32 work items. */
-static void get_benchmark_work(struct work *work)
-{
-	work->work_difficulty = 32;
-	memcpy(work->target, bench_target, 32);
-	work->drv_rolllimit = 0;
-	work->mandatory = true;
-	work->pool = pools[0];
-	cgtime(&work->tv_getwork);
-	copy_time(&work->tv_getwork_reply, &work->tv_getwork);
-	work->getwork_mode = GETWORK_MODE_BENCHMARK;
-}
-
-static void benchfile_dspwork(struct work *work, uint32_t nonce)
-{
-	char buf[1024];
-	uint32_t dn;
-	int i;
-
-	dn = 0;
-	for (i = 0; i < 4; i++) {
-		dn *= 0x100;
-		dn += nonce & 0xff;
-		nonce /= 0x100;
-	}
-
-	if ((sizeof(work->data) * 2 + 1) > sizeof(buf))
-		quithere(1, "BENCHFILE Invalid buf size");
-
-	__bin2hex(buf, work->data, sizeof(work->data));
-
-	applog(LOG_ERR, "BENCHFILE nonce %u=0x%08x for work=%s",
-			(unsigned int)dn, (unsigned int)dn, buf);
-
-}
-
-static bool benchfile_get_work(struct work *work)
-{
-	char buf[1024];
-	char item[1024];
-	bool got = false;
-
-	if (!benchfile_in) {
-		if (opt_benchfile)
-			benchfile_in = fopen(opt_benchfile, "r");
-		else
-			quit(1, "BENCHFILE Invalid benchfile NULL");
-
-		if (!benchfile_in)
-			quit(1, "BENCHFILE Failed to open benchfile '%s'", opt_benchfile);
-
-		benchfile_line = 0;
-
-		if (!fgets(buf, 1024, benchfile_in))
-			quit(1, "BENCHFILE Failed to read benchfile '%s'", opt_benchfile);
-
-		got = true;
-		benchfile_work = 0;
-	}
-
-	if (!got) {
-		if (!fgets(buf, 1024, benchfile_in)) {
-			if (benchfile_work == 0)
-				quit(1, "BENCHFILE No work in benchfile '%s'", opt_benchfile);
-			fclose(benchfile_in);
-			benchfile_in = NULL;
-			return benchfile_get_work(work);
-		}
-	}
-
-	do {
-		benchfile_line++;
-
-		// Empty lines and lines starting with '#' or '/' are ignored
-		if (*buf != '\0' && *buf != '#' && *buf != '/') {
-			char *commas[BENCHWORK_COUNT];
-			int i, j, len;
-			long nonce_time;
-
-			commas[0] = buf;
-			for (i = 1; i < BENCHWORK_COUNT; i++) {
-				commas[i] = strchr(commas[i-1], ',');
-				if (!commas[i]) {
-					quit(1, "BENCHFILE Invalid input file line %d"
-						" - field count is %d but should be %d",
-						benchfile_line, i, BENCHWORK_COUNT);
-				}
-				len = commas[i] - commas[i-1];
-				if (benchfile_data[i-1].length &&
-				    (len != benchfile_data[i-1].length)) {
-					quit(1, "BENCHFILE Invalid input file line %d "
-						"field %d (%s) length is %d but should be %d",
-						benchfile_line, i,
-						benchfile_data[i-1].name,
-						len, benchfile_data[i-1].length);
-				}
-
-				*(commas[i]++) = '\0';
-			}
-
-			// NonceTime may have LF's etc
-			len = strlen(commas[BENCHWORK_NONCETIME]);
-			if (len < benchfile_data[BENCHWORK_NONCETIME].length) {
-				quit(1, "BENCHFILE Invalid input file line %d field %d"
-					" (%s) length is %d but should be least %d",
-					benchfile_line, BENCHWORK_NONCETIME+1,
-					benchfile_data[BENCHWORK_NONCETIME].name, len,
-					benchfile_data[BENCHWORK_NONCETIME].length);
-			}
-
-			sprintf(item, "0000000%c", commas[BENCHWORK_VERSION][0]);
-
-			j = strlen(item);
-			for (i = benchfile_data[BENCHWORK_PREVHASH].length-8; i >= 0; i -= 8) {
-				sprintf(&(item[j]), "%.8s", &commas[BENCHWORK_PREVHASH][i]);
-				j += 8;
-			}
-
-			for (i = benchfile_data[BENCHWORK_MERKLEROOT].length-8; i >= 0; i -= 8) {
-				sprintf(&(item[j]), "%.8s", &commas[BENCHWORK_MERKLEROOT][i]);
-				j += 8;
-			}
-
-			nonce_time = atol(commas[BENCHWORK_NONCETIME]);
-
-			sprintf(&(item[j]), "%08lx", nonce_time);
-			j += 8;
-
-			strcpy(&(item[j]), commas[BENCHWORK_DIFFBITS]);
-			j += benchfile_data[BENCHWORK_DIFFBITS].length;
-
-			memset(work, 0, sizeof(*work));
-
-			hex2bin(work->data, item, j >> 1);
-
-			calc_midstate(work);
-
-			benchfile_work++;
-
-			return true;
-		}
-	} while (fgets(buf, 1024, benchfile_in));
-
-	if (benchfile_work == 0)
-		quit(1, "BENCHFILE No work in benchfile '%s'", opt_benchfile);
-	fclose(benchfile_in);
-	benchfile_in = NULL;
-	return benchfile_get_work(work);
-}
-
-static void get_benchfile_work(struct work *work)
-{
-	benchfile_get_work(work);
-	work->mandatory = true;
-	work->pool = pools[0];
-	cgtime(&work->tv_getwork);
-	copy_time(&work->tv_getwork_reply, &work->tv_getwork);
-	work->getwork_mode = GETWORK_MODE_BENCHMARK;
-	calc_diff(work, 0);
-}
 
 static void kill_timeout(struct thr_info *thr)
 {
@@ -2324,9 +1964,6 @@ static bool stale_work(struct work *work, bool share)
 	time_t work_expiry;
 	struct pool *pool;
 	int getwork_delay;
-
-	if (opt_benchmark || opt_benchfile)
-		return false;
 
 	if (work->work_block != work_block) {
 		applog(LOG_DEBUG, "Work stale due to block mismatch");
@@ -4269,36 +3906,6 @@ void set_target(unsigned char *dest_target, double diff)
 	memcpy(dest_target, target, 32);
 }
 
-#if defined (USE_AVALON2) || defined (USE_HASHRATIO)
-bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *real_pool,
-			 uint32_t nonce2, uint32_t nonce)
-{
-	const int thr_id = thr->id;
-	struct cgpu_info *cgpu = thr->cgpu;
-	struct device_drv *drv = cgpu->drv;
-	struct work *work = make_work();
-	bool ret;
-
-	cg_wlock(&pool->data_lock);
-	pool->nonce2 = nonce2;
-	cg_wunlock(&pool->data_lock);
-
-	gen_stratum_work(pool, work);
-	work->pool = real_pool;
-
-	work->thr_id = thr_id;
-	work->work_block = work_block;
-	work->pool->works++;
-
-	work->mined = true;
-	work->device_diff = MIN(drv->max_diff, work->work_difficulty);
-	work->device_diff = MAX(drv->min_diff, work->device_diff);
-
-	ret = submit_nonce(thr, work, nonce);
-	free_work(work);
-	return ret;
-}
-#endif
 
 /* Generates stratum based work based on the most recent notify information
  * from the pool. This will keep generating work while a pool is down so we use
@@ -4392,20 +3999,6 @@ int share_work_tdiff(struct cgpu_info *cgpu)
 	return last_getwork - cgpu->last_device_valid_work;
 }
 
-static void set_benchmark_work(struct cgpu_info *cgpu, struct work *work)
-{
-	cgpu->lodiff += cgpu->direction;
-	if (cgpu->lodiff < 1)
-		cgpu->direction = 1;
-	if (cgpu->lodiff > 15) {
-		cgpu->direction = -1;
-		if (++cgpu->hidiff > 15)
-			cgpu->hidiff = 0;
-		memcpy(work, &bench_hidiff_bins[cgpu->hidiff][0], 160);
-	} else
-		memcpy(work, &bench_lodiff_bins[cgpu->lodiff][0], 160);
-}
-
 struct work *get_work(struct thr_info *thr, const int thr_id)
 {
 	struct cgpu_info *cgpu = thr->cgpu;
@@ -4433,9 +4026,7 @@ struct work *get_work(struct thr_info *thr, const int thr_id)
 	applog(LOG_DEBUG, "Got work from get queue to get work for thread %d", thr_id);
 
 	work->thr_id = thr_id;
-	if (opt_benchmark)
-		set_benchmark_work(cgpu, work);
-
+	
 	thread_reportin(thr);
 	work->mined = true;
 	work->device_diff = MIN(cgpu->drv->max_diff, work->work_difficulty);
@@ -4450,22 +4041,7 @@ static void submit_work_async(struct work *work)
 	pthread_t submit_thread;
 
 	cgtime(&work->tv_work_found);
-	if (opt_benchmark) {
-		struct cgpu_info *cgpu = get_thr_cgpu(work->thr_id);
-
-		mutex_lock(&stats_lock);
-		cgpu->accepted++;
-		total_accepted++;
-		pool->accepted++;
-		cgpu->diff_accepted += work->work_difficulty;
-		total_diff_accepted += work->work_difficulty;
-		pool->diff_accepted += work->work_difficulty;
-		mutex_unlock(&stats_lock);
-
-		applog(LOG_NOTICE, "Accepted %s %d benchmark share nonce %08x",
-		       cgpu->drv->name, cgpu->device_id, *(uint32_t *)(work->data + 64 + 12));
-		return;
-	}
+	
 
 	if (stale_work(work, true)) {
 		if (opt_submit_stale)
@@ -4635,9 +4211,6 @@ bool submit_nonce(struct thr_info *thr, struct work *work, uint32_t nonce)
 		return false;
 	}
 
-	if (opt_benchfile && opt_benchfile_display)
-		benchfile_dspwork(work, nonce);
-
 	return true;
 }
 
@@ -4694,8 +4267,6 @@ bool submit_noffset_nonce(struct thr_info *thr, struct work *work_in, uint32_t n
 	}
 	update_work_stats(thr, work);
 
-	if (opt_benchfile && opt_benchfile_display)
-		benchfile_dspwork(work, nonce);
 
 	ret = true;
 	if (!fulltest(work->hash, work->target)) {
@@ -5386,7 +4957,7 @@ static void *watchpool_thread(void __maybe_unused *userdata)
 		for (i = 0; i < total_pools; i++) {
 			struct pool *pool = pools[i];
 
-			if (!opt_benchmark && !opt_benchfile) {
+			if (1) {
 				reap_curl(pool);
 				prune_stratum_shares(pool);
 			}
@@ -6279,117 +5850,19 @@ int main(int argc, char *argv[])
 	if (argc != 1)
 		early_quit(1, "Unexpected extra commandline arguments");
 
-	if (!config_loaded)
-		load_default_config();
+	load_default_config();
 
-	if (opt_benchmark || opt_benchfile) {
-		struct pool *pool;
-
-		pool = add_pool();
-		pool->rpc_url = malloc(255);
-		if (opt_benchfile)
-			strcpy(pool->rpc_url, "Benchfile");
-		else
-			strcpy(pool->rpc_url, "Benchmark");
-		pool->rpc_user = pool->rpc_url;
-		pool->rpc_pass = pool->rpc_url;
-		pool->rpc_userpass = pool->rpc_url;
-		pool->sockaddr_url = pool->rpc_url;
-		strncpy(pool->diff, "?", sizeof(pool->diff)-1);
-		pool->diff[sizeof(pool->diff)-1] = '\0';
-		enable_pool(pool);
-		pool->idle = false;
-		successful_connect = true;
-
-		for (i = 0; i < 16; i++) {
-			hex2bin(&bench_hidiff_bins[i][0], &bench_hidiffs[i][0], 160);
-			hex2bin(&bench_lodiff_bins[i][0], &bench_lodiffs[i][0], 160);
-		}
-		set_target(bench_target, 32);
-	}
-	
-	if(opt_version_path) {
-		FILE * fpversion = fopen(opt_version_path, "rb");
-		char tmp[256] = {0};
-		int len = 0;
-		char * start = 0;
-		if(fpversion == NULL) {
-			applog(LOG_ERR, "Open miner version file %s error", opt_version_path);
-		} else {
-			len = fread(tmp, 1, 256, fpversion);
-			if(len <= 0) {
-				applog(LOG_ERR, "Read miner version file %s error %d", opt_version_path, len);
-			} else {
-				start = strstr(tmp, "\n");
-				if(start == NULL) {
-					strcpy(g_miner_compiletime, tmp);
-				} else {
-					memcpy(g_miner_compiletime, tmp, start-tmp);
-					strcpy(g_miner_type, start+1);
-				}
-				if(g_miner_compiletime[strlen(g_miner_compiletime)-1] == '\n')
-					g_miner_compiletime[strlen(g_miner_compiletime)-1] = 0;
-				if(g_miner_compiletime[strlen(g_miner_compiletime)-1] == '\r')
-					g_miner_compiletime[strlen(g_miner_compiletime)-1] = 0;
-				if(g_miner_type[strlen(g_miner_type)-1] == '\n')
-					g_miner_type[strlen(g_miner_type)-1] = 0;
-				if(g_miner_type[strlen(g_miner_type)-1] == '\r')
-					g_miner_type[strlen(g_miner_type)-1] = 0;
-			}
-		}
-		applog(LOG_ERR, "Miner compile time: %s type: %s", g_miner_compiletime, g_miner_type);
-	}
-
-	if(opt_logfile_path) {
+	if (opt_logfile_path) {
 		g_logfile_enable = true;
 		strcpy(g_logfile_path, opt_logfile_path);
-		if(opt_logfile_openflag) {
+		if (opt_logfile_openflag) {
 			strcpy(g_logfile_openflag, opt_logfile_openflag);
 		}
 		applog(LOG_ERR, "Log file path: %s Open flag: %s", g_logfile_path, g_logfile_openflag);
 	}
 
-	if(opt_logwork_path) {
-		char szfilepath[256] = {0};
-		if(opt_logwork_asicnum) {
-			if(strlen(opt_logwork_asicnum) <= 0) {
-				quit(1, "Log work asic num empty");
-			}
-			g_logwork_asicnum = atoi(opt_logwork_asicnum);
-			if(g_logwork_asicnum != 1 && g_logwork_asicnum != 32 && g_logwork_asicnum != 64) {
-				quit(1, "Log work asic num must be 1, 32, 64");
-			}
-			applog(LOG_ERR, "Log work path: %s Asic num: %s", opt_logwork_path, opt_logwork_asicnum);
-		} else {
-			applog(LOG_ERR, "Log work path: %s", opt_logwork_path);
-		}
-
-		sprintf(szfilepath, "%s.txt", opt_logwork_path);
-		g_logwork_file = fopen(szfilepath, "a+");
-		applog(LOG_ERR, "Log work open file %s", szfilepath);
-
-		if(g_logwork_asicnum == 1) {
-			sprintf(szfilepath, "%s%02d.txt", opt_logwork_path, g_logwork_asicnum);
-			g_logwork_files[0] = fopen(szfilepath, "a+");
-			applog(LOG_ERR, "Log work open asic %d file %s", g_logwork_asicnum, szfilepath);
-		} else if(g_logwork_asicnum == 32 || g_logwork_asicnum == 64) {
-			for(i = 0; i <= g_logwork_asicnum; i++) {
-				sprintf(szfilepath, "%s%02d_%02d.txt", opt_logwork_path, g_logwork_asicnum, i);
-				g_logwork_files[i] = fopen(szfilepath, "a+");
-				applog(LOG_ERR, "Log work open asic %d file %s", g_logwork_asicnum, szfilepath);
-			}
-		}
-
-		if(opt_logwork_diff) {
-			for(i = 0; i <= 64; i++) {
-				sprintf(szfilepath, "%s_diff_%02d.txt", opt_logwork_path, i);
-				g_logwork_diffs[i] = fopen(szfilepath, "a+");
-				applog(LOG_ERR, "Log work open diff file %s", szfilepath);
-			}
-		}
-	}
-
 	applog(LOG_WARNING, "Started %s", packagename);
+
 	if (cnfbuf) {
 		applog(LOG_NOTICE, "Loaded configuration file %s", cnfbuf);
 		switch (fileconf_load) {
@@ -6399,8 +5872,6 @@ int main(int argc, char *argv[])
 				break;
 			case -1:
 				applog(LOG_WARNING, "Error in configuration file, partially loaded.");
-				if (use_curses)
-					applog(LOG_WARNING, "Start cgminer with -T to see what failed to load.");
 				break;
 			default:
 				break;
@@ -6424,7 +5895,6 @@ int main(int argc, char *argv[])
 
 	gwsched_thr_id = 0;
 
-#ifdef USE_USBUTILS
 	usb_initialise();
 
 	// before device detection
@@ -6434,25 +5904,12 @@ int main(int argc, char *argv[])
 	if (thr_info_create(thr, NULL, usb_resource_thread, thr))
 		early_quit(1, "usb resource thread create failed");
 	pthread_detach(thr->pth);
-#endif
 
 	/* Use the DRIVER_PARSE_COMMANDS macro to fill all the device_drvs */
 	DRIVER_PARSE_COMMANDS(DRIVER_FILL_DEVICE_DRV)
 
 	/* Use the DRIVER_PARSE_COMMANDS macro to detect all devices */
 	DRIVER_PARSE_COMMANDS(DRIVER_DRV_DETECT_ALL)
-
-	if (opt_display_devs) {
-		applog(LOG_ERR, "Devices detected:");
-		for (i = 0; i < total_devices; ++i) {
-			struct cgpu_info *cgpu = devices[i];
-			if (cgpu->name)
-				applog(LOG_ERR, " %2d. %s %d: %s (driver: %s)", i, cgpu->drv->name, cgpu->device_id, cgpu->name, cgpu->drv->dname);
-			else
-				applog(LOG_ERR, " %2d. %s %d (driver: %s)", i, cgpu->drv->name, cgpu->device_id, cgpu->drv->dname);
-		}
-		early_quit(0, "%d devices listed", total_devices);
-	}
 
 	mining_threads = 0;
 	for (i = 0; i < total_devices; ++i)
@@ -6515,8 +5972,9 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (opt_benchmark || opt_benchfile)
-		goto begin_bench;
+// TODO : à étudier
+//	if (opt_benchmark || opt_benchfile)
+//		goto begin_bench;
 
 	for (i = 0; i < total_pools; i++) {
 		struct pool *pool  = pools[i];
@@ -6545,11 +6003,8 @@ int main(int argc, char *argv[])
 				i, pool->rpc_url, pool->rpc_user, pool->rpc_pass);
 			}
 			pool_msg = true;
-			if (use_curses)
-				applog(LOG_ERR, "Press any key to exit, or cgminer will wait indefinitely for an alive pool.");
 		}
-		if (!use_curses)
-			early_quit(0, "No servers could be used! Exiting.");
+		early_quit(0, "No servers could be used! Exiting.");
 	};
 
 begin_bench:
@@ -6589,13 +6044,11 @@ begin_bench:
 	if (thr_info_create(thr, NULL, api_thread, thr))
 		early_quit(1, "API thread create failed");
 
-#ifdef USE_USBUTILS
 	hotplug_thr_id = 6;
 	thr = &control_thr[hotplug_thr_id];
 	if (thr_info_create(thr, NULL, hotplug_thread, thr))
 		early_quit(1, "hotplug thread create failed");
 	pthread_detach(thr->pth);
-#endif
 
 
 	/* Just to be sure */
@@ -6678,18 +6131,6 @@ retry:
 			}
 			gen_stratum_work(pool, work);
 			applog(LOG_DEBUG, "Generated stratum work");
-			stage_work(work);
-			continue;
-		}
-
-		if (opt_benchfile) {
-			get_benchfile_work(work);
-			applog(LOG_DEBUG, "Generated benchfile work");
-			stage_work(work);
-			continue;
-		} else if (opt_benchmark) {
-			get_benchmark_work(work);
-			applog(LOG_DEBUG, "Generated benchmark work");
 			stage_work(work);
 			continue;
 		}
