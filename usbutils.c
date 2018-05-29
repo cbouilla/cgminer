@@ -61,23 +61,7 @@ static cgtimer_t usb11_cgt;
 #define ICARUS_TIMEOUT_MS 999
 #define BMSC_TIMEOUT_MS 999
 
-#ifdef WIN32
-#define BFLSC_TIMEOUT_MS 999
-#define BITFORCE_TIMEOUT_MS 999
-#define MODMINER_TIMEOUT_MS 999
-#define AVALON_TIMEOUT_MS 999
-#define BITMAIN_TIMEOUT_MS 999
-#define KLONDIKE_TIMEOUT_MS 999
-#define COINTERRA_TIMEOUT_MS 999
-#define HASHFAST_TIMEOUT_MS 999
-#define HASHRATIO_TIMEOUT_MS 999
-#define BLOCKERUPTER_TIMEOUT_MS 999
 
-/* The safety timeout we use, cancelling async transfers on windows that fail
- * to timeout on their own. */
-#define WIN_CALLBACK_EXTRA 40
-#define WIN_WRITE_CBEXTRA 5000
-#else
 #define BFLSC_TIMEOUT_MS 300
 #define BITFORCE_TIMEOUT_MS 200
 #define MODMINER_TIMEOUT_MS 100
@@ -88,7 +72,7 @@ static cgtimer_t usb11_cgt;
 #define HASHFAST_TIMEOUT_MS 500
 #define HASHRATIO_TIMEOUT_MS 200
 #define BLOCKERUPTER_TIMEOUT_MS 300
-#endif
+
 
 #define USB_EPS(_intx, _epinfosx) { \
 		.interface = _intx, \
@@ -120,348 +104,21 @@ static struct usb_intinfo bflsc_ints[] = {
 };
 #endif
 
-#ifdef USE_BITFORCE
-// N.B. transfer size is 512 with USB2.0, but only 64 with USB1.1
-static struct usb_epinfo bfl_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
 
-static struct usb_intinfo bfl_ints[] = {
-	USB_EPS(0, bfl_epinfos)
-};
-#endif
 
-#ifdef USE_BITFURY
-static struct usb_epinfo bfu0_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_INTERRUPT,	8,	EPI(2), 0, 0 }
-};
 
-static struct usb_epinfo bfu1_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	16,	EPI(3), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	16,	EPO(4), 0, 0 }
-};
 
-/* Default to interface 1 */
-static struct usb_intinfo bfu_ints[] = {
-	USB_EPS(1,  bfu1_epinfos),
-	USB_EPS(0,  bfu0_epinfos)
-};
 
-static struct usb_epinfo bxf0_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_INTERRUPT,	8,	EPI(1), 0, 0 }
-};
-
-static struct usb_epinfo bxf1_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(2), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-
-static struct usb_intinfo bxf_ints[] = {
-	USB_EPS(1,  bxf1_epinfos),
-	USB_EPS(0,  bxf0_epinfos)
-};
-
-static struct usb_epinfo nfu_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_INTERRUPT,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_INTERRUPT,	64,	EPO(1), 0, 0 },
-};
-
-static struct usb_intinfo nfu_ints[] = {
-	USB_EPS(0, nfu_epinfos)
-};
-
-static struct usb_epinfo bxm_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	512,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	512,	EPO(2), 0, 0 }
-};
-
-static struct usb_intinfo bxm_ints[] = {
-	USB_EPS(0, bxm_epinfos)
-};
-#endif
-
-#ifdef USE_BLOCKERUPTER
-// BlockErupter Device
-static struct usb_epinfo bet_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(1), 0, 0 }
-};
-
-static struct usb_intinfo bet_ints[] = {
-	USB_EPS(0, bet_epinfos)
-};
-#endif
-
-#ifdef USE_DRILLBIT
-// Drillbit Bitfury devices
-static struct usb_epinfo drillbit_int_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_INTERRUPT,	8,	EPI(3), 0, 0 }
-};
-
-static struct usb_epinfo drillbit_bulk_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	16,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	16,	EPO(2), 0, 0 },
-};
-
-/* Default to interface 1 */
-static struct usb_intinfo drillbit_ints[] = {
-	USB_EPS(1,  drillbit_bulk_epinfos),
-	USB_EPS(0,  drillbit_int_epinfos)
-};
-#endif
-
-#ifdef USE_HASHFAST
-#include "driver-hashfast.h"
-
-static struct usb_epinfo hfa0_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_INTERRUPT,	8,	EPI(3), 0, 0 }
-};
-
-static struct usb_epinfo hfa1_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-
-/* Default to interface 1 */
-static struct usb_intinfo hfa_ints[] = {
-	USB_EPS(1,  hfa1_epinfos),
-	USB_EPS(0,  hfa0_epinfos)
-};
-#endif
-
-#ifdef USE_HASHRATIO
-static struct usb_epinfo hro_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-
-static struct usb_intinfo hro_ints[] = {
-	USB_EPS(0, hro_epinfos)
-};
-#endif
-
-#ifdef USE_MODMINER
-static struct usb_epinfo mmq_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(3), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(3), 0, 0 }
-};
-
-static struct usb_intinfo mmq_ints[] = {
-	USB_EPS(1, mmq_epinfos)
-};
-#endif
-
-#ifdef USE_AVALON
-static struct usb_epinfo ava_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-
-static struct usb_intinfo ava_ints[] = {
-	USB_EPS(0, ava_epinfos)
-};
-#endif
-
-#ifdef USE_AVALON2
-static struct usb_epinfo ava2_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(3), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-
-static struct usb_intinfo ava2_ints[] = {
-	USB_EPS(0, ava2_epinfos)
-};
-#endif
-
-#ifdef USE_KLONDIKE
-static struct usb_epinfo kln_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(1), 0, 0 }
-};
-
-static struct usb_intinfo kln_ints[] = {
-	USB_EPS(0, kln_epinfos)
-};
-
-static struct usb_epinfo kli0_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_INTERRUPT, 8,	EPI(1), 0, 0 }
-};
-
-static struct usb_epinfo kli1_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(2), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-
-static struct usb_intinfo kli_ints[] = {
-	USB_EPS(1, kli1_epinfos),
-	USB_EPS(0, kli0_epinfos)
-};
-#endif
-
-#ifdef USE_ICARUS
-static struct usb_epinfo ica_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(3), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-
-static struct usb_intinfo ica_ints[] = {
-	USB_EPS(0, ica_epinfos)
-};
-
-static struct usb_epinfo ica1_epinfos0[] = {
-	{ LIBUSB_TRANSFER_TYPE_INTERRUPT,	16,	EPI(0x82), 0, 0 }
-};
-
-static struct usb_epinfo ica1_epinfos1[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(0x81), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(0x01), 0, 0 }
-};
-
-static struct usb_intinfo ica1_ints[] = {
-	USB_EPS(1, ica1_epinfos1),
-	USB_EPS(0, ica1_epinfos0)
-};
-
-static struct usb_epinfo amu_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(1), 0, 0 }
-};
-
-static struct usb_intinfo amu_ints[] = {
-	USB_EPS(0, amu_epinfos)
-};
-
-static struct usb_epinfo llt_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-
-static struct usb_intinfo llt_ints[] = {
-	USB_EPS(0, llt_epinfos)
-};
-
-static struct usb_epinfo cmr1_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-
-static struct usb_intinfo cmr1_ints[] = {
-	USB_EPS(0, cmr1_epinfos)
-};
-
-static struct usb_epinfo cmr2_epinfos0[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-static struct usb_epinfo cmr2_epinfos1[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(3), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(4), 0, 0 },
-};
-static struct usb_epinfo cmr2_epinfos2[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(5), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(6), 0, 0 },
-};
-static struct usb_epinfo cmr2_epinfos3[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(7), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(8), 0, 0 }
-};
-
-static struct usb_intinfo cmr2_ints[] = {
-	USB_EPS_CTRL(0, 1, cmr2_epinfos0),
-	USB_EPS_CTRL(1, 2, cmr2_epinfos1),
-	USB_EPS_CTRL(2, 3, cmr2_epinfos2),
-	USB_EPS_CTRL(3, 4, cmr2_epinfos3)
-};
-#endif
-
-#ifdef USE_COINTERRA
-static struct usb_epinfo cointerra_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(1), 0, 0 }
-};
-
-static struct usb_intinfo cointerra_ints[] = {
-	USB_EPS(0, cointerra_epinfos)
-};
-#endif
-
-#ifdef USE_BMSC
-static struct usb_epinfo ica_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(3), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-
-static struct usb_intinfo ica_ints[] = {
-	USB_EPS(0, ica_epinfos)
-};
-
-static struct usb_epinfo amu_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(1), 0, 0 }
-};
-
-static struct usb_intinfo amu_ints[] = {
-	USB_EPS(0, amu_epinfos)
-};
-
-static struct usb_epinfo llt_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-
-static struct usb_intinfo llt_ints[] = {
-	USB_EPS(0, llt_epinfos)
-};
-
-static struct usb_epinfo cmr1_epinfos[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-
-static struct usb_intinfo cmr1_ints[] = {
-	USB_EPS(0, cmr1_epinfos)
-};
-
-static struct usb_epinfo cmr2_epinfos0[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-};
-static struct usb_epinfo cmr2_epinfos1[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(3), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(4), 0, 0 },
-};
-static struct usb_epinfo cmr2_epinfos2[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(5), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(6), 0, 0 },
-};
-static struct usb_epinfo cmr2_epinfos3[] = {
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(7), 0, 0 },
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(8), 0, 0 }
-};
-
-static struct usb_intinfo cmr2_ints[] = {
-	USB_EPS_CTRL(0, 1, cmr2_epinfos0),
-	USB_EPS_CTRL(1, 2, cmr2_epinfos1),
-	USB_EPS_CTRL(2, 3, cmr2_epinfos2),
-	USB_EPS_CTRL(3, 4, cmr2_epinfos3)
-};
-#endif
-
-#ifdef USE_BITMAIN
 static struct usb_epinfo btm_epinfos[] = {
 	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPI(1), 0, 0 },
-#ifdef WIN32
-	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(2), 0, 0 }
-#else
 	{ LIBUSB_TRANSFER_TYPE_BULK,	64,	EPO(1), 0, 0 }
-#endif
+
 };
 
 static struct usb_intinfo btm_ints[] = {
 	USB_EPS(0, btm_epinfos)
 };
-#endif
+
 
 #define IDVENDOR_FTDI 0x0403
 
@@ -475,453 +132,15 @@ static struct usb_intinfo btm_ints[] = {
 
 // TODO: Add support for (at least) Isochronous endpoints
 static struct usb_find_devices find_dev[] = {
-#ifdef USE_BFLSC
-	{
-		.drv = DRIVER_bflsc,
-		.name = "BAS",
-		.ident = IDENT_BAS,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6014,
-		//.iManufacturer = "Butterfly Labs",
-		.iProduct = "BitFORCE SHA256 SC",
-		.config = 1,
-		.timeout = BFLSC_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(bflsc_ints) },
-	{
-		.drv = DRIVER_bflsc,
-		.name = "BMA",
-		.ident = IDENT_BMA,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6014,
-		//.iManufacturer = "BUTTERFLY LABS"
-		.iProduct = "BitFORCE SC-28nm",
-		.config = 1,
-		.timeout = BFLSC_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(bflsc_ints) },
-	{
-		.drv = DRIVER_bflsc,
-		.name = "BMA",
-		.ident = IDENT_BMA,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6014,
-		.iManufacturer = "BUTTERFLY LABS",
-		.iProduct = "BitFORCE SHA256",
-		.config = 1,
-		.timeout = BFLSC_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(bflsc_ints) },
-#endif
-#ifdef USE_BITFORCE
-	{
-		.drv = DRIVER_bitforce,
-		.name = "BFL",
-		.ident = IDENT_BFL,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6014,
-		.iManufacturer = "Butterfly Labs Inc.",
-		.iProduct = "BitFORCE SHA256",
-		.config = 1,
-		.timeout = BITFORCE_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(bfl_ints) },
-#endif
-#ifdef USE_BITFURY
-	{
-		.drv = DRIVER_bitfury,
-		.name = "BF1",
-		.ident = IDENT_BF1,
-		.idVendor = 0x03eb,
-		.idProduct = 0x204b,
-		.config = 1,
-		.timeout = BITFURY_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		//.iManufacturer = "BPMC",
-		.iProduct = "Bitfury BF1",
-		INTINFO(bfu_ints)
-	},
-	{
-		.drv = DRIVER_bitfury,
-		.name = "BXF",
-		.ident = IDENT_BXF,
-		.idVendor = 0x198c,
-		.idProduct = 0xb1f1,
-		.config = 1,
-		.timeout = BITFURY_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		.iManufacturer = "c-scape",
-		.iProduct = "bi?fury",
-		INTINFO(bxf_ints)
-	},
-	{
-		.drv = DRIVER_bitfury,
-		.name = "OSM",
-		.ident = IDENT_OSM,
-		.idVendor = 0x198c,
-		.idProduct = 0xb1f1,
-		.config = 1,
-		.timeout = BITFURY_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		.iManufacturer = "c-scape",
-		.iProduct = "OneString",
-		INTINFO(bxf_ints)
-	},
-	{
-		.drv = DRIVER_bitfury,
-		.name = "NFU",
-		.ident = IDENT_NFU,
-		.idVendor = 0x04d8,
-		.idProduct = 0x00de,
-		.config = 1,
-		.timeout = BITFURY_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(nfu_ints)
-	},
-	{
-		.drv = DRIVER_bitfury,
-		.name = "BXM",
-		.ident = IDENT_BXM,
-		.idVendor = 0x0403,
-		.idProduct = 0x6014,
-		.config = 1,
-		.timeout = BITFURY_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(bxm_ints)
-	},
-#endif
-#ifdef USE_BLOCKERUPTER
-	{
-		.drv = DRIVER_blockerupter,
-		.name = "BET",
-		.ident = IDENT_BET,
-		.idVendor = 0x10c4,
-		.idProduct = 0xea60,
-		.config = 1,
-		.timeout = BLOCKERUPTER_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(bet_ints) },
-	
-#endif	
-#ifdef USE_DRILLBIT
-	{
-		.drv = DRIVER_drillbit,
-		.name = "DRB",
-		.ident = IDENT_DRB,
-		.idVendor = 0x03eb,
-		.idProduct = 0x2404,
-		.config = 1,
-		.timeout = DRILLBIT_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		.iManufacturer = "Drillbit Systems",
-		.iProduct = NULL, /* Can be Thumb or Eight, same driver */
-		INTINFO(drillbit_ints)
-	},
-#endif
-#ifdef USE_MODMINER
-	{
-		.drv = DRIVER_modminer,
-		.name = "MMQ",
-		.ident = IDENT_MMQ,
-		.idVendor = 0x1fc9,
-		.idProduct = 0x0003,
-		.config = 1,
-		.timeout = MODMINER_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(mmq_ints) },
-#endif
-#ifdef USE_AVALON
-	{
-		.drv = DRIVER_avalon,
-		.name = "BTB",
-		.ident = IDENT_BTB,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6001,
-		.iManufacturer = "Burnin Electronics",
-		.iProduct = "BitBurner",
-		.config = 1,
-		.timeout = AVALON_TIMEOUT_MS,
-		.latency = 10,
-		INTINFO(ava_ints) },
-	{
-		.drv = DRIVER_avalon,
-		.name = "BBF",
-		.ident = IDENT_BBF,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6001,
-		.iManufacturer = "Burnin Electronics",
-		.iProduct = "BitBurner Fury",
-		.config = 1,
-		.timeout = AVALON_TIMEOUT_MS,
-		.latency = 10,
-		INTINFO(ava_ints) },
-	{
-		.drv = DRIVER_avalon,
-		.name = "AVA",
-		.ident = IDENT_AVA,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6001,
-		.config = 1,
-		.timeout = AVALON_TIMEOUT_MS,
-		.latency = 10,
-		INTINFO(ava_ints) },
-#endif
-#ifdef USE_AVALON2
-	{
-		.drv = DRIVER_avalon2,
-		.name = "AV2",
-		.ident = IDENT_AV2,
-		.idVendor = 0x067b,
-		.idProduct = 0x2303,
-		.config = 1,
-		.timeout = AVALON_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(ava2_ints) },
-#endif
-#ifdef USE_HASHFAST
-	{
-		.drv = DRIVER_hashfast,
-		.name = "HFA",
-		.ident = IDENT_HFA,
-		.idVendor = HF_USB_VENDOR_ID,
-		.idProduct = HF_USB_PRODUCT_ID_G1,
-		.iManufacturer = "HashFast LLC",
-		.iProduct = "M1 Module",
-		.config = 1,
-		.timeout = HASHFAST_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(hfa_ints) },
-#endif
-#ifdef USE_HASHRATIO
-	{
-		.drv = DRIVER_hashratio,
-		.name = "HRO",
-		.ident = IDENT_HRO,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6001,
-		.config = 1,
-		.timeout = HASHRATIO_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(hro_ints) },
-#endif
-#ifdef USE_KLONDIKE
-	{
-		.drv = DRIVER_klondike,
-		.name = "KLN",
-		.ident = IDENT_KLN,
-		.idVendor = 0x04D8,
-		.idProduct = 0xF60A,
-		.config = 1,
-		.timeout = KLONDIKE_TIMEOUT_MS,
-		.latency = 10,
-		INTINFO(kln_ints) },
-	{
-		.drv = DRIVER_klondike,
-		.name = "KLI",
-		.ident = IDENT_KLN,
-		.idVendor = 0x04D8,
-		.idProduct = 0xF60A,
-		.config = 1,
-		.timeout = KLONDIKE_TIMEOUT_MS,
-		.latency = 10,
-		INTINFO(kli_ints) },
-#endif
-#ifdef USE_ICARUS
-	{
-		.drv = DRIVER_icarus,
-		.name = "ICA",
-		.ident = IDENT_ICA,
-		.idVendor = 0x067b,
-		.idProduct = 0x2303,
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(ica_ints) },
-	{
-		.drv = DRIVER_icarus,
- 		.name = "ICA",
- 		.ident = IDENT_AVA,
- 		.idVendor = 0x1fc9,
- 		.idProduct = 0x0083,
- 		.config = 1,
- 		.timeout = ICARUS_TIMEOUT_MS,
- 		.latency = LATENCY_UNUSED,
- 		INTINFO(ica1_ints) },
-	{
-		.drv = DRIVER_icarus,
-		.name = "AMU",
-		.ident = IDENT_AMU,
-		.idVendor = 0x10c4,
-		.idProduct = 0xea60,
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(amu_ints) },
-	{
-		.drv = DRIVER_icarus,
-		.name = "LIN",
-		.ident = IDENT_LIN,
-		.idVendor = 0x10c4,
-		.idProduct = 0xea60,
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(amu_ints) },
-	{
-		.drv = DRIVER_icarus,
-		.name = "ANU",
-		.ident = IDENT_ANU,
-		.idVendor = 0x10c4,
-		.idProduct = 0xea60,
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(amu_ints) },
-	{
-		.drv = DRIVER_icarus,
-		.name = "BLT",
-		.ident = IDENT_BLT,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6001,
-		.iProduct = "FT232R USB UART",
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(llt_ints) },
-	// For any that don't match the above "BLT"
-	{
-		.drv = DRIVER_icarus,
-		.name = "LLT",
-		.ident = IDENT_LLT,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6001,
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(llt_ints) },
-	{
-		.drv = DRIVER_icarus,
-		.name = "CMR",
-		.ident = IDENT_CMR1,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6014,
-		.iProduct = "Cairnsmore1",
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(cmr1_ints) },
-	{
-		.drv = DRIVER_icarus,
-		.name = "CMR",
-		.ident = IDENT_CMR2,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x8350,
-		.iProduct = "Cairnsmore1",
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(cmr2_ints) },
-#endif
-#ifdef USE_COINTERRA
-	{
-		.drv = DRIVER_cointerra,
-		.name = "CTA",
-		.ident = IDENT_CTA,
-		.idVendor = 0x1cbe,
-		.idProduct = 0x0003,
-		.config = 1,
-		.timeout = COINTERRA_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(cointerra_ints) },
-#endif
-#ifdef USE_BMSC
-	{
-		.drv = DRIVER_bmsc,
-		.name = "ICA",
-		.ident = IDENT_ICA,
-		.idVendor = 0x067b,
-		.idProduct = 0x2303,
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(ica_ints) },
-	{
-		.drv = DRIVER_bmsc,
-		.name = "AMU",
-		.ident = IDENT_AMU,
-		.idVendor = 0x10c4,
-		.idProduct = 0xea60,
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(amu_ints) },
-	{
-		.drv = DRIVER_bmsc,
-		.name = "ANU",
-		.ident = IDENT_ANU,
-		.idVendor = 0x10c4,
-		.idProduct = 0xea60,
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_UNUSED,
-		INTINFO(amu_ints) },
-	{
-		.drv = DRIVER_bmsc,
-		.name = "BLT",
-		.ident = IDENT_BLT,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6001,
-		.iProduct = "FT232R USB UART",
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(llt_ints) },
-	// For any that don't match the above "BLT"
-	{
-		.drv = DRIVER_bmsc,
-		.name = "LLT",
-		.ident = IDENT_LLT,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6001,
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(llt_ints) },
-	{
-		.drv = DRIVER_bmsc,
-		.name = "CMR",
-		.ident = IDENT_CMR1,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6014,
-		.iProduct = "Cairnsmore1",
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(cmr1_ints) },
-	{
-		.drv = DRIVER_bmsc,
-		.name = "CMR",
-		.ident = IDENT_CMR2,
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x8350,
-		.iProduct = "Cairnsmore1",
-		.config = 1,
-		.timeout = ICARUS_TIMEOUT_MS,
-		.latency = LATENCY_STD,
-		INTINFO(cmr2_ints) },
-#endif
-#ifdef USE_BITMAIN
+
+
+
 	{
 		.drv = DRIVER_bitmain,
 		.name = "BMM",
 		.ident = IDENT_BMM,
-#ifdef WIN32
-		.idVendor = IDVENDOR_FTDI,
-		.idProduct = 0x6001,
-#else
 		.idVendor = 0x4254,
 		.idProduct = 0x4153,
-#endif
 		.config = 1,
 		.timeout = BITMAIN_TIMEOUT_MS,
 		.latency = 10,
@@ -936,7 +155,6 @@ static struct usb_find_devices find_dev[] = {
 		.timeout = BITMAIN_TIMEOUT_MS,
 		.latency = 10,
 		INTINFO(btm_ints) },
-#endif
 	{ DRIVER_MAX, NULL, 0, 0, 0, NULL, NULL, 0, 0, 0, 0, NULL }
 };
 
@@ -1023,63 +241,14 @@ struct resource_reply *res_reply_head = NULL;
 #define MODE_BULK_WRITE (1 << 3)
 
 // Set this to 0 to remove stats processing
-#define DO_USB_STATS 1
 
 static bool stats_initialised = false;
 
-#if DO_USB_STATS
-
-#define MODE_SEP_STR "+"
-#define MODE_NONE_STR "X"
-#define MODE_CTRL_READ_STR "cr"
-#define MODE_CTRL_WRITE_STR "cw"
-#define MODE_BULK_READ_STR "br"
-#define MODE_BULK_WRITE_STR "bw"
-
-// One for each CMD, TIMEOUT, ERROR
-struct cg_usb_stats_item {
-	uint64_t count;
-	double total_delay;
-	double min_delay;
-	double max_delay;
-	struct timeval first;
-	struct timeval last;
-};
-
-#define CMD_CMD 0
-#define CMD_TIMEOUT 1
-#define CMD_ERROR 2
-
-// One for each C_CMD
-struct cg_usb_stats_details {
-	int seq;
-	uint32_t modes;
-	struct cg_usb_stats_item item[CMD_ERROR+1];
-};
-
-// One for each device
-struct cg_usb_stats {
-	char *name;
-	int device_id;
-	struct cg_usb_stats_details *details;
-};
-
-static struct cg_usb_stats *usb_stats = NULL;
-static int next_stat = USB_NOSTAT;
-
-#define SECTOMS(s) ((int)((s) * 1000))
-
-#define USB_STATS(sgpu_, sta_, fin_, err_, mode_, cmd_, seq_, tmo_) \
-		stats(sgpu_, sta_, fin_, err_, mode_, cmd_, seq_, tmo_)
-#define STATS_TIMEVAL(tv_) cgtime(tv_)
-#define USB_REJECT(sgpu_, mode_) rejected_inc(sgpu_, mode_)
-
-#else
 #define USB_STATS(sgpu_, sta_, fin_, err_, mode_, cmd_, seq_, tmo_)
 #define STATS_TIMEVAL(tv_)
 #define USB_REJECT(sgpu_, mode_)
 
-#endif // DO_USB_STATS
+
 
 /* Create usb_commands array from USB_PARSE_COMMANDS macro in usbutils.h */
 char *usb_commands[] = {
@@ -2739,82 +1908,10 @@ static void modes_str(char *buf, uint32_t modes)
 // things down more
 struct api_data *api_usb_stats(__maybe_unused int *count)
 {
-#if DO_USB_STATS
-	struct cg_usb_stats_details *details;
-	struct cg_usb_stats *sta;
-	struct api_data *root = NULL;
-	int device;
-	int cmdseq;
-	char modes_s[32];
-
-	if (next_stat == USB_NOSTAT)
-		return NULL;
-
-	while (*count < next_stat * C_MAX * 2) {
-		device = *count / (C_MAX * 2);
-		cmdseq = *count % (C_MAX * 2);
-
-		(*count)++;
-
-		sta = &(usb_stats[device]);
-		details = &(sta->details[cmdseq]);
-
-		// Only show stats that have results
-		if (details->item[CMD_CMD].count == 0 &&
-		    details->item[CMD_TIMEOUT].count == 0 &&
-		    details->item[CMD_ERROR].count == 0)
-			continue;
-
-		root = api_add_string(root, "Name", sta->name, false);
-		root = api_add_int(root, "ID", &(sta->device_id), false);
-		root = api_add_const(root, "Stat", usb_commands[cmdseq/2], false);
-		root = api_add_int(root, "Seq", &(details->seq), true);
-		modes_str(modes_s, details->modes);
-		root = api_add_string(root, "Modes", modes_s, true);
-		root = api_add_uint64(root, "Count",
-					&(details->item[CMD_CMD].count), true);
-		root = api_add_double(root, "Total Delay",
-					&(details->item[CMD_CMD].total_delay), true);
-		root = api_add_double(root, "Min Delay",
-					&(details->item[CMD_CMD].min_delay), true);
-		root = api_add_double(root, "Max Delay",
-					&(details->item[CMD_CMD].max_delay), true);
-		root = api_add_uint64(root, "Timeout Count",
-					&(details->item[CMD_TIMEOUT].count), true);
-		root = api_add_double(root, "Timeout Total Delay",
-					&(details->item[CMD_TIMEOUT].total_delay), true);
-		root = api_add_double(root, "Timeout Min Delay",
-					&(details->item[CMD_TIMEOUT].min_delay), true);
-		root = api_add_double(root, "Timeout Max Delay",
-					&(details->item[CMD_TIMEOUT].max_delay), true);
-		root = api_add_uint64(root, "Error Count",
-					&(details->item[CMD_ERROR].count), true);
-		root = api_add_double(root, "Error Total Delay",
-					&(details->item[CMD_ERROR].total_delay), true);
-		root = api_add_double(root, "Error Min Delay",
-					&(details->item[CMD_ERROR].min_delay), true);
-		root = api_add_double(root, "Error Max Delay",
-					&(details->item[CMD_ERROR].max_delay), true);
-		root = api_add_timeval(root, "First Command",
-					&(details->item[CMD_CMD].first), true);
-		root = api_add_timeval(root, "Last Command",
-					&(details->item[CMD_CMD].last), true);
-		root = api_add_timeval(root, "First Timeout",
-					&(details->item[CMD_TIMEOUT].first), true);
-		root = api_add_timeval(root, "Last Timeout",
-					&(details->item[CMD_TIMEOUT].last), true);
-		root = api_add_timeval(root, "First Error",
-					&(details->item[CMD_ERROR].first), true);
-		root = api_add_timeval(root, "Last Error",
-					&(details->item[CMD_ERROR].last), true);
-
-		return root;
-	}
-#endif
 	return NULL;
 }
 
-#if DO_USB_STATS
+#if 0
 static void newstats(struct cgpu_info *cgpu)
 {
 	int i;
@@ -4038,7 +3135,7 @@ static LPSECURITY_ATTRIBUTES mksec(const char *dname, uint8_t bus_number, uint8_
 static bool resource_lock(const char *dname, uint8_t bus_number, uint8_t device_address)
 {
 	applog(LOG_DEBUG, "USB res lock %s %d-%d", dname, (int)bus_number, (int)device_address);
-#ifdef WIN32
+#if 0
 	struct cgpu_info *cgpu;
 	LPSECURITY_ATTRIBUTES sec;
 	HANDLE usbMutex;
@@ -4147,7 +3244,7 @@ static void resource_unlock(const char *dname, uint8_t bus_number, uint8_t devic
 {
 	applog(LOG_DEBUG, "USB res unlock %s %d-%d", dname, (int)bus_number, (int)device_address);
 
-#ifdef WIN32
+#if 0
 	LPSECURITY_ATTRIBUTES sec = NULL;
 	HANDLE usbMutex = NULL;
 	char name[64];
@@ -4297,7 +3394,7 @@ struct cgpu_info *btm_free_cgpu(struct cgpu_info *cgpu)
 
 bool btm_init(struct cgpu_info *cgpu, const char * devpath)
 {
-#ifdef WIN32
+#if 0
 	int fd = -1;
 	signed short timeout = 1;
 	unsigned long baud = 115200;

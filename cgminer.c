@@ -108,7 +108,7 @@ bool use_curses = false;
 static bool opt_widescreen;
 static bool alt_status;
 static bool switch_status;
-const static bool opt_submit_stale = true;
+static const bool opt_submit_stale = true;
 static int opt_shares;
 bool opt_fail_only;
 static bool opt_fix_protocol;
@@ -122,18 +122,7 @@ const char *opt_logfile_openflag = NULL;
 const char *opt_logwork_path = NULL;
 const char *opt_logwork_asicnum = NULL;
 const bool opt_logwork_diff = false;
-const char *opt_api_allow = NULL;
-const char *opt_api_groups;
-const char *opt_api_description = PACKAGE_STRING;
-const int opt_api_port = 4028;
-const char *opt_api_host = API_LISTEN_ADDR;
-const bool opt_api_listen;
-const bool opt_api_mcast;
-const char *opt_api_mcast_addr = API_MCAST_ADDR;
-const char *opt_api_mcast_code = API_MCAST_CODE;
-const char *opt_api_mcast_des = "";
-const int opt_api_mcast_port = 4028;
-const bool opt_api_network;
+
 const bool opt_delaynet;
 const bool opt_disable_pool;
 static bool no_work;
@@ -164,7 +153,7 @@ static int watchpool_thr_id;
 static int watchdog_thr_id;
 
 int gpur_thr_id;
-static int api_thr_id;
+// static int api_thr_id;
 
 static int usbres_thr_id;
 static int hotplug_thr_id;
@@ -1711,13 +1700,11 @@ static void __kill_work(void)
 
 	forcelog(LOG_INFO, "Received kill message");
 
-#ifdef USE_USBUTILS
 	/* Best to get rid of it first so it doesn't
 	 * try to create any new devices */
 	forcelog(LOG_DEBUG, "Killing off HotPlug thread");
 	thr = &control_thr[hotplug_thr_id];
 	kill_timeout(thr);
-#endif
 
 	forcelog(LOG_DEBUG, "Killing off watchpool thread");
 	/* Kill the watchpool thread */
@@ -1747,12 +1734,6 @@ static void __kill_work(void)
 
 	cg_completion_timeout(&kill_mining, NULL, 3000);
 
-	/* Stop the others */
-	forcelog(LOG_DEBUG, "Killing off API thread");
-	thr = &control_thr[api_thr_id];
-	kill_timeout(thr);
-
-#ifdef USE_USBUTILS
 	/* Release USB resources in case it's a restart
 	 * and not a QUIT */
 	forcelog(LOG_DEBUG, "Releasing all USB devices");
@@ -1761,8 +1742,6 @@ static void __kill_work(void)
 	forcelog(LOG_DEBUG, "Killing off usbres thread");
 	thr = &control_thr[usbres_thr_id];
 	kill_timeout(thr);
-#endif
-
 }
 
 /* This should be the common exit path */
@@ -2814,26 +2793,19 @@ void zero_stats(void)
 
 static void set_highprio(void)
 {
-#ifndef WIN32
+
 	int ret = nice(-10);
 
 	if (!ret)
 		applog(LOG_DEBUG, "Unable to set thread to high priority");
-#else
-	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
-#endif
 }
 
 static void set_lowprio(void)
 {
-#ifndef WIN32
 	int ret = nice(10);
 
 	if (!ret)
 		applog(LOG_INFO, "Unable to set thread to low priority");
-#else
-	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_LOWEST);
-#endif
 }
 
 void default_save_file(char *filename)
@@ -2843,7 +2815,6 @@ void default_save_file(char *filename)
 		return;
 	}
 
-#if defined(unix) || defined(__APPLE__)
 	if (getenv("HOME") && *getenv("HOME")) {
 	        strcpy(filename, getenv("HOME"));
 		strcat(filename, "/");
@@ -2852,28 +2823,9 @@ void default_save_file(char *filename)
 		strcpy(filename, "");
 	strcat(filename, ".cgminer/");
 	mkdir(filename, 0777);
-#else
-	strcpy(filename, "");
-#endif
 	strcat(filename, def_conf);
 }
 
-static void *api_thread(void *userdata)
-{
-	struct thr_info *mythr = userdata;
-
-	pthread_detach(pthread_self());
-	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
-
-	RenameThread("API");
-
-	set_lowprio();
-	api(api_thr_id);
-
-	PTH(mythr) = 0L;
-
-	return NULL;
-}
 
 /* Sole work devices are serialised wrt calling get_work so they report in on
  * each pass through their scanhash function as well as in get_work whereas
@@ -6038,18 +5990,13 @@ begin_bench:
 		early_quit(1, "watchdog thread create failed");
 	pthread_detach(thr->pth);
 
-	/* Create API socket thread */
-	api_thr_id = 5;
-	thr = &control_thr[api_thr_id];
-	if (thr_info_create(thr, NULL, api_thread, thr))
-		early_quit(1, "API thread create failed");
-
 	hotplug_thr_id = 6;
 	thr = &control_thr[hotplug_thr_id];
 	if (thr_info_create(thr, NULL, hotplug_thread, thr))
 		early_quit(1, "hotplug thread create failed");
 	pthread_detach(thr->pth);
 
+	// ATTENTION, J'AI VIRE LE THREAD API
 
 	/* Just to be sure */
 	if (total_control_threads != 8)

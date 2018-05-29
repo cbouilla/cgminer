@@ -16,18 +16,13 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <unistd.h>
-#ifndef WIN32
-  #include <sys/select.h>
-  #include <termios.h>
-  #include <sys/stat.h>
-  #include <fcntl.h>
-  #ifndef O_CLOEXEC
-    #define O_CLOEXEC 0
-  #endif
-#else
-  #include "compat.h"
-  #include <windows.h>
-  #include <io.h>
+
+#include <sys/select.h>
+#include <termios.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#ifndef O_CLOEXEC
+  #define O_CLOEXEC 0
 #endif
 
 #include "elist.h"
@@ -908,32 +903,10 @@ static int bitmain_read(struct cgpu_info *bitmain, unsigned char *buf,
 		return -1;
 	}
 	if(opt_bitmain_dev_usb) {
-#ifdef WIN32
-		char readbuf[BITMAIN_READBUF_SIZE];
-		int ofs = 2, cp = 0;
-
-		err = usb_read_once_timeout(bitmain, readbuf, bufsize, &readlen, timeout, ep);
-		applog(LOG_DEBUG, "%s%i: Get bitmain read got readlen %d err %d",
-			bitmain->drv->name, bitmain->device_id, readlen, err);
-
-		if (readlen < 2)
-			goto out;
-
-		while (readlen > 2) {
-			cp = readlen - 2;
-			if (cp > 62)
-				cp = 62;
-			memcpy(&buf[total], &readbuf[ofs], cp);
-			total += cp;
-			readlen -= cp + 2;
-			ofs += 64;
-		}
-#else
 		err = usb_read_once_timeout(bitmain, buf, bufsize, &readlen, timeout, ep);
 		applog(LOG_DEBUG, "%s%i: Get bitmain read got readlen %d err %d",
 			bitmain->drv->name, bitmain->device_id, readlen, err);
 		total = readlen;
-#endif
 	} else {
 		err = btm_read(bitmain, buf, bufsize);
 		total = err;
@@ -1354,10 +1327,8 @@ static void bitmain_parse_results(struct cgpu_info *bitmain, struct bitmain_info
 				applog(LOG_DEBUG, "bitmain_parse_rxnonce fifo space=%d", info->fifo_space);
 #endif
 
-#ifndef WIN32
 				if(nonce_num < BITMAIN_MAX_NONCE_NUM)
 					cgsleep_ms(5);
-#endif
 			}
 
  			found = true;
@@ -1441,19 +1412,11 @@ static void *bitmain_get_results(void *userdata)
 
 		if ((ret < 1) || (ret == 18)) {
 			errorcount++;
-#ifdef WIN32
-			if(errorcount > 200) {
-				//applog(LOG_ERR, "bitmain_read errorcount ret=%d", ret);
-				cgsleep_ms(20);
-				errorcount = 0;
-			}
-#else
 			if(errorcount > 3) {
 				//applog(LOG_ERR, "bitmain_read errorcount ret=%d", ret);
 				cgsleep_ms(20);
 				errorcount = 0;
 			}
-#endif
 			if(ret < 1)
 			{
 				cgsleep_ms(1);	// add by clement : we just wait a little time for RX data...
@@ -1729,95 +1692,11 @@ static void bitmain_usb_init(struct cgpu_info *bitmain)
 {
 	int err, interface;
 
-#ifndef WIN32
 	return;
-#endif
 
-	if (bitmain->usbinfo.nodev)
-		return;
-
-	interface = usb_interface(bitmain);
-
-	// Reset
-	err = usb_transfer(bitmain, FTDI_TYPE_OUT, FTDI_REQUEST_RESET,
-		FTDI_VALUE_RESET, interface, C_RESET);
-
-	applog(LOG_DEBUG, "%s%i: reset got err %d",
-		bitmain->drv->name, bitmain->device_id, err);
-
-	if (bitmain->usbinfo.nodev)
-		return;
-
-	// Set latency
-	err = usb_transfer(bitmain, FTDI_TYPE_OUT, FTDI_REQUEST_LATENCY,
-		BITMAIN_LATENCY, interface, C_LATENCY);
-
-	applog(LOG_DEBUG, "%s%i: latency got err %d",
-		bitmain->drv->name, bitmain->device_id, err);
-
-	if (bitmain->usbinfo.nodev)
-		return;
-
-	// Set data
-	err = usb_transfer(bitmain, FTDI_TYPE_OUT, FTDI_REQUEST_DATA,
-				FTDI_VALUE_DATA_BTM, interface, C_SETDATA);
-
-	applog(LOG_DEBUG, "%s%i: data got err %d",
-		bitmain->drv->name, bitmain->device_id, err);
-
-	if (bitmain->usbinfo.nodev)
-		return;
-
-	// Set the baud
-	err = usb_transfer(bitmain, FTDI_TYPE_OUT, FTDI_REQUEST_BAUD, FTDI_VALUE_BAUD_BTM,
-				(FTDI_INDEX_BAUD_BTM & 0xff00) | interface,
-				C_SETBAUD);
-
-	applog(LOG_DEBUG, "%s%i: setbaud got err %d",
-		bitmain->drv->name, bitmain->device_id, err);
-
-	if (bitmain->usbinfo.nodev)
-		return;
-
-	// Set Modem Control
-	err = usb_transfer(bitmain, FTDI_TYPE_OUT, FTDI_REQUEST_MODEM,
-		FTDI_VALUE_MODEM, interface, C_SETMODEM);
-
-	applog(LOG_DEBUG, "%s%i: setmodemctrl got err %d",
-		bitmain->drv->name, bitmain->device_id, err);
-
-	if (bitmain->usbinfo.nodev)
-		return;
-
-	// Set Flow Control
-	err = usb_transfer(bitmain, FTDI_TYPE_OUT, FTDI_REQUEST_FLOW,
-		FTDI_VALUE_FLOW, interface, C_SETFLOW);
-
-	applog(LOG_DEBUG, "%s%i: setflowctrl got err %d",
-		bitmain->drv->name, bitmain->device_id, err);
-
-	if (bitmain->usbinfo.nodev)
-		return;
-
-	/* BitMain repeats the following */
-	// Set Modem Control
-	err = usb_transfer(bitmain, FTDI_TYPE_OUT, FTDI_REQUEST_MODEM,
-		FTDI_VALUE_MODEM, interface, C_SETMODEM);
-
-	applog(LOG_DEBUG, "%s%i: setmodemctrl 2 got err %d",
-		bitmain->drv->name, bitmain->device_id, err);
-
-	if (bitmain->usbinfo.nodev)
-		return;
-
-	// Set Flow Control
-	err = usb_transfer(bitmain, FTDI_TYPE_OUT, FTDI_REQUEST_FLOW,
-		FTDI_VALUE_FLOW, interface, C_SETFLOW);
-
-	applog(LOG_DEBUG, "%s%i: setflowctrl 2 got err %d",
-		bitmain->drv->name, bitmain->device_id, err);
 }
 
+// TODO : à virer
 static struct cgpu_info * bitmain_usb_detect_one(libusb_device *dev, struct usb_find_devices *found)
 {
 	int baud, chain_num, asic_num, timeout, frequency = 0;
@@ -2305,6 +2184,7 @@ static void bitmain_flush_work(struct cgpu_info *bitmain)
 
 static struct api_data *bitmain_api_stats(struct cgpu_info *cgpu)
 {
+	#if 0
 	struct api_data *root = NULL;
 	struct bitmain_info *info = cgpu->device_data;
 	char buf[64];
@@ -2411,6 +2291,7 @@ static struct api_data *bitmain_api_stats(struct cgpu_info *cgpu)
 	//root = api_add_int(root, "chain_acs4", &(info->chain_asic_status[3]), false);
 
 	return root;
+	#endif
 }
 
 static void bitmain_shutdown(struct thr_info *thr)
@@ -2479,7 +2360,7 @@ struct device_drv bitmain_drv = {
 	.queue_full = bitmain_fill,
 	.scanwork = bitmain_scanhash,
 	.flush_work = bitmain_flush_work,
-	.get_api_stats = bitmain_api_stats,
+	.get_api_stats = NULL,
 	.get_statline_before = get_bitmain_statline_before,
 	.reinit_device = bitmain_init,
 	.thread_shutdown = bitmain_shutdown,

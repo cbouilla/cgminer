@@ -93,10 +93,10 @@ static void keep_sockalive(SOCKETTYPE fd)
 	fcntl(fd, F_SETFL, O_NONBLOCK | flags);
 
 	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (const void *)&tcp_one, sizeof(tcp_one));
-	if (!opt_delaynet)
+	if (1)
 /* __linux */
 	fcntl(fd, F_SETFD, FD_CLOEXEC);
-		setsockopt(fd, SOL_TCP, TCP_NODELAY, (const void *)&tcp_one, sizeof(tcp_one));
+	setsockopt(fd, SOL_TCP, TCP_NODELAY, (const void *)&tcp_one, sizeof(tcp_one));
 	setsockopt(fd, SOL_TCP, TCP_KEEPCNT, &tcp_one, sizeof(tcp_one));
 	setsockopt(fd, SOL_TCP, TCP_KEEPIDLE, &tcp_keepidle, sizeof(tcp_keepidle));
 	setsockopt(fd, SOL_TCP, TCP_KEEPINTVL, &tcp_keepintvl, sizeof(tcp_keepintvl));
@@ -2677,95 +2677,8 @@ int check_asicnum(int asic_num, unsigned char nonce)
 
 void cg_logwork(struct work *work, unsigned char *nonce_bin, bool ok)
 {
-	if(opt_logwork_path) {
-		char szmsg[1024] = {0};
-		unsigned char midstate_tmp[32] = {0};
-		unsigned char data_tmp[32] = {0};
-		unsigned char hash_tmp[32] = {0};
-		char * szworkdata = NULL;
-		char * szmidstate = NULL;
-		char * szdata = NULL;
-		char * sznonce4 = NULL;
-		char * sznonce5 = NULL;
-		char * szhash = NULL;
-		int asicnum = 0;
-		uint64_t worksharediff = 0;
-		memcpy(midstate_tmp, work->midstate, 32);
-		memcpy(data_tmp, work->data+64, 12);
-		memcpy(hash_tmp, work->hash, 32);
-		rev((void *)midstate_tmp, 32);
-		rev((void *)data_tmp, 12);
-		rev((void *)hash_tmp, 32);
-		szworkdata = bin2hex((void *)work->data, 128);
-		szmidstate = bin2hex((void *)midstate_tmp, 32);
-		szdata = bin2hex((void *)data_tmp, 12);
-		sznonce4 = bin2hex((void *)nonce_bin, 4);
-		sznonce5 = bin2hex((void *)nonce_bin, 5);
-		szhash = bin2hex((void *)hash_tmp, 32);
-		worksharediff = share_ndiff(work);
-		sprintf(szmsg, "%s %08x midstate %s data %s nonce %s hash %s diff %I64d", ok?"o":"x", work->id, szmidstate, szdata, sznonce5, szhash, worksharediff);
-		if(strcmp(opt_logwork_path, "screen") == 0) {
-			applog(LOG_ERR, szmsg);
-		} else {
-			applog(LOG_ERR, szmsg);
-			if(g_logwork_file) {
-				sprintf(szmsg, "%s %08x work %s midstate %s data %s nonce %s hash %s diff %I64d", ok?"o":"x", work->id, szworkdata, szmidstate, szdata, sznonce5, szhash, worksharediff);
-
-				fwrite(szmsg, strlen(szmsg), 1, g_logwork_file);
-				fwrite("\n", 1, 1, g_logwork_file);
-				fflush(g_logwork_file);
-
-				if(ok) {
-					if(g_logwork_asicnum == 1) {
-						sprintf(szmsg, "midstate %s data %s nonce %s hash %s", szmidstate, szdata, sznonce4, szhash);
-						fwrite(szmsg, strlen(szmsg), 1, g_logwork_files[0]);
-						fwrite("\n", 1, 1, g_logwork_files[0]);
-						fflush(g_logwork_files[0]);
-					} else if(g_logwork_asicnum == 32 || g_logwork_asicnum == 64) {
-						sprintf(szmsg, "midstate %s data %s nonce %s hash %s", szmidstate, szdata, sznonce4, szhash);
-						asicnum = check_asicnum(g_logwork_asicnum, nonce_bin[0]);
-						fwrite(szmsg, strlen(szmsg), 1, g_logwork_files[asicnum]);
-						fwrite("\n", 1, 1, g_logwork_files[asicnum]);
-						fflush(g_logwork_files[asicnum]);
-					}
-
-					if(opt_logwork_diff) {
-						int diffnum = 0;
-						uint64_t difftmp = worksharediff;
-						while(1) {
-							difftmp = difftmp >> 1;
-							if(difftmp > 0) {
-								diffnum++;
-								if(diffnum >= 64) {
-									break;
-								}
-							} else {
-								break;
-							}
-						}
-						applog(LOG_DEBUG, "work diff %I64d diffnum %d", worksharediff, diffnum);
-						sprintf(szmsg, "midstate %s data %s nonce %s hash %s", szmidstate, szdata, sznonce4, szhash);
-						fwrite(szmsg, strlen(szmsg), 1, g_logwork_diffs[diffnum]);
-						fwrite("\n", 1, 1, g_logwork_diffs[diffnum]);
-						fflush(g_logwork_diffs[diffnum]);
-					}
-				}
-			}
-		}
-		if(szworkdata) free(szworkdata);
-		if(szmidstate) free(szmidstate);
-		if(szdata) free(szdata);
-		if(sznonce4) free(sznonce4);
-		if(sznonce5) free(sznonce5);
-		if(szhash) free(szhash);
-	}
 }
 
 void cg_logwork_uint32(struct work *work, uint32_t nonce, bool ok)
 {
-	if(opt_logwork_path) {
-		unsigned char nonce_bin[5] = {0};
-		memcpy(nonce_bin, &nonce, 4);
-		cg_logwork(work, nonce_bin, ok);
-	}
 }
