@@ -11,9 +11,6 @@
 
 #include "config.h"
 
-#ifdef HAVE_CURSES
-#include <curses.h>
-#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,11 +33,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#ifndef WIN32
 #include <sys/resource.h>
-#else
-#include <windows.h>
-#endif
 #include <ccan/opt/opt.h>
 #include <jansson.h>
 char *curly = ":D";
@@ -55,15 +48,16 @@ char *curly = ":D";
 #include "usbutils.h"
 #endif
 
-#if defined(unix) || defined(__APPLE__)
+
 	#include <errno.h>
 	#include <fcntl.h>
 	#include <sys/wait.h>
-#endif
+
 
 #include "driver-bitmain.h"
 #define USE_FPGA
 
+#include <inttypes.h>
 
 struct strategies strategies[] = {
 	{ "Failover" },
