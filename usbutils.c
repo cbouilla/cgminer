@@ -679,80 +679,6 @@ void usb_applog(struct cgpu_info *cgpu, enum usb_cmds cmd, char *msg, int amount
                         err, amount);
 }
 
-#ifdef WIN32
-static void in_use_store_ress(uint8_t bus_number, uint8_t device_address, void *resource1, void *resource2)
-{
-	struct usb_in_use_list *in_use_tmp;
-	bool found = false, empty = true;
-
-	mutex_lock(&cgusb_lock);
-	in_use_tmp = in_use_head;
-	while (in_use_tmp) {
-		if (in_use_tmp->in_use.bus_number == (int)bus_number &&
-			in_use_tmp->in_use.device_address == (int)device_address) {
-			found = true;
-
-			if (in_use_tmp->in_use.resource1)
-				empty = false;
-			in_use_tmp->in_use.resource1 = resource1;
-
-			if (in_use_tmp->in_use.resource2)
-				empty = false;
-			in_use_tmp->in_use.resource2 = resource2;
-
-			break;
-		}
-		in_use_tmp = in_use_tmp->next;
-	}
-	mutex_unlock(&cgusb_lock);
-
-	if (found == false)
-		applog(LOG_ERR, "FAIL: USB store_ress not found (%d:%d)",
-				(int)bus_number, (int)device_address);
-
-	if (empty == false)
-		applog(LOG_ERR, "FAIL: USB store_ress not empty (%d:%d)",
-				(int)bus_number, (int)device_address);
-}
-
-static void in_use_get_ress(uint8_t bus_number, uint8_t device_address, void **resource1, void **resource2)
-{
-	struct usb_in_use_list *in_use_tmp;
-	bool found = false, empty = false;
-
-	mutex_lock(&cgusb_lock);
-	in_use_tmp = in_use_head;
-	while (in_use_tmp) {
-		if (in_use_tmp->in_use.bus_number == (int)bus_number &&
-			in_use_tmp->in_use.device_address == (int)device_address) {
-			found = true;
-
-			if (!in_use_tmp->in_use.resource1)
-				empty = true;
-			*resource1 = in_use_tmp->in_use.resource1;
-			in_use_tmp->in_use.resource1 = NULL;
-
-			if (!in_use_tmp->in_use.resource2)
-				empty = true;
-			*resource2 = in_use_tmp->in_use.resource2;
-			in_use_tmp->in_use.resource2 = NULL;
-
-			break;
-		}
-		in_use_tmp = in_use_tmp->next;
-	}
-	mutex_unlock(&cgusb_lock);
-
-	if (found == false)
-		applog(LOG_ERR, "FAIL: USB get_lock not found (%d:%d)",
-				(int)bus_number, (int)device_address);
-
-	if (empty == true)
-		applog(LOG_ERR, "FAIL: USB get_lock empty (%d:%d)",
-				(int)bus_number, (int)device_address);
-}
-#else
-
 static void in_use_store_fd(uint8_t bus_number, uint8_t device_address, int fd)
 {
 	struct usb_in_use_list *in_use_tmp;
@@ -802,7 +728,6 @@ static int in_use_get_fd(uint8_t bus_number, uint8_t device_address)
 	}
 	return fd;
 }
-#endif
 
 static bool _in_use(struct usb_in_use_list *head, uint8_t bus_number,
 		    uint8_t device_address)
@@ -1129,9 +1054,7 @@ static void _usb_uninit(struct cgpu_info *cgpu)
 			libusb_release_interface(cgpu->usbdev->handle,
 						 THISIF(cgpu->usbdev->found, ifinfo));
 		}
-#ifdef LINUX
 		libusb_attach_kernel_driver(cgpu->usbdev->handle, THISIF(cgpu->usbdev->found, ifinfo));
-#endif
 		cg_wlock(&cgusb_fd_lock);
 		libusb_close(cgpu->usbdev->handle);
 		cgpu->usbdev->handle = NULL;
@@ -1373,15 +1296,6 @@ static int _usb_init(struct cgpu_info *cgpu, struct libusb_device *dev, struct u
 					err, devstr);
 				applog(LOG_ERR, "See README file included for help");
 				break;
-#ifdef WIN32
-			// Windows specific message
-			case LIBUSB_ERROR_NOT_SUPPORTED:
-				applog(LOG_ERR, "USB init, open device failed, err %d, ", err);
-				applog(LOG_ERR, "You need to install a WinUSB driver for %s", devstr);
-				applog(LOG_ERR, "And associate %s with WinUSB using zadig", devstr);
-				applog(LOG_ERR, "See README.txt file included for help");
-				break;
-#endif
 			default:
 				applog(LOG_DEBUG,
 					"USB init, open failed, err %d %s",
@@ -1390,7 +1304,6 @@ static int _usb_init(struct cgpu_info *cgpu, struct libusb_device *dev, struct u
 		goto dame;
 	}
 
-#ifdef LINUX
 	for (ifinfo = 0; ifinfo < found->intinfo_count; ifinfo++) {
 		if (libusb_kernel_driver_active(cgusb->handle, THISIF(found, ifinfo)) == 1) {
 			applog(LOG_DEBUG, "USB init, kernel attached ... %s", devstr);
@@ -1409,7 +1322,7 @@ static int _usb_init(struct cgpu_info *cgpu, struct libusb_device *dev, struct u
 			}
 		}
 	}
-#endif
+
 
 		err = libusb_get_string_descriptor_ascii(cgusb->handle,
 							 cgusb->descriptor->iManufacturer,
@@ -1652,11 +1565,9 @@ reldame:
 		libusb_release_interface(cgusb->handle, THISIF(found, ifinfo));
 
 cldame:
-#ifdef LINUX
 	libusb_attach_kernel_driver(cgusb->handle, THISIF(found, ifinfo));
 
 nokernel:
-#endif
 	cg_wlock(&cgusb_fd_lock);
 	libusb_close(cgusb->handle);
 	cgusb->handle = NULL;
@@ -1861,46 +1772,6 @@ void __usb_detect(struct device_drv *drv, struct cgpu_info *(*device_detect)(str
 	libusb_free_device_list(list, 1);
 }
 
-#if DO_USB_STATS
-static void modes_str(char *buf, uint32_t modes)
-{
-	bool first;
-
-	*buf = '\0';
-
-	if (modes == MODE_NONE)
-		strcpy(buf, MODE_NONE_STR);
-	else {
-		first = true;
-
-		if (modes & MODE_CTRL_READ) {
-			strcpy(buf, MODE_CTRL_READ_STR);
-			first = false;
-		}
-
-		if (modes & MODE_CTRL_WRITE) {
-			if (!first)
-				strcat(buf, MODE_SEP_STR);
-			strcat(buf, MODE_CTRL_WRITE_STR);
-			first = false;
-		}
-
-		if (modes & MODE_BULK_READ) {
-			if (!first)
-				strcat(buf, MODE_SEP_STR);
-			strcat(buf, MODE_BULK_READ_STR);
-			first = false;
-		}
-
-		if (modes & MODE_BULK_WRITE) {
-			if (!first)
-				strcat(buf, MODE_SEP_STR);
-			strcat(buf, MODE_BULK_WRITE_STR);
-			first = false;
-		}
-	}
-}
-#endif
 
 // The stat data can be spurious due to not locking it before copying it -
 // however that would require the stat() function to also lock and release
@@ -1911,129 +1782,11 @@ struct api_data *api_usb_stats(__maybe_unused int *count)
 	return NULL;
 }
 
-#if 0
-static void newstats(struct cgpu_info *cgpu)
-{
-	int i;
-
-	mutex_lock(&cgusb_lock);
-
-	cgpu->usbinfo.usbstat = next_stat + 1;
-
-	usb_stats = realloc(usb_stats, sizeof(*usb_stats) * (next_stat+1));
-	if (unlikely(!usb_stats))
-		quit(1, "USB failed to realloc usb_stats %d", next_stat+1);
-
-	usb_stats[next_stat].name = cgpu->drv->name;
-	usb_stats[next_stat].device_id = -1;
-	usb_stats[next_stat].details = calloc(2, sizeof(struct cg_usb_stats_details) * (C_MAX + 1));
-	if (unlikely(!usb_stats[next_stat].details))
-		quit(1, "USB failed to calloc details for %d", next_stat+1);
-
-	for (i = 1; i < C_MAX * 2; i += 2)
-		usb_stats[next_stat].details[i].seq = 1;
-
-	next_stat++;
-
-	mutex_unlock(&cgusb_lock);
-}
-#endif
 
 void update_usb_stats(__maybe_unused struct cgpu_info *cgpu)
 {
-#if DO_USB_STATS
-	if (cgpu->usbinfo.usbstat < 1)
-		newstats(cgpu);
-
-	// we don't know the device_id until after add_cgpu()
-	usb_stats[cgpu->usbinfo.usbstat - 1].device_id = cgpu->device_id;
-#endif
 }
 
-#if DO_USB_STATS
-static void stats(struct cgpu_info *cgpu, struct timeval *tv_start, struct timeval *tv_finish, int err, int mode, enum usb_cmds cmd, int seq, int timeout)
-{
-	struct cg_usb_stats_details *details;
-	double diff;
-	int item, extrams;
-
-	if (cgpu->usbinfo.usbstat < 1)
-		newstats(cgpu);
-
-	cgpu->usbinfo.tmo_count++;
-
-	// timeout checks are only done when stats are enabled
-	extrams = SECTOMS(tdiff(tv_finish, tv_start)) - timeout;
-	if (extrams >= USB_TMO_0) {
-		uint32_t totms = (uint32_t)(timeout + extrams);
-		int offset = 0;
-
-		if (extrams >= USB_TMO_2) {
-			applog(LOG_INFO, "%s%i: TIMEOUT %s took %dms but was %dms",
-					cgpu->drv->name, cgpu->device_id,
-					usb_cmdname(cmd), totms, timeout) ;
-			offset = 2;
-		} else if (extrams >= USB_TMO_1)
-			offset = 1;
-
-		cgpu->usbinfo.usb_tmo[offset].count++;
-		cgpu->usbinfo.usb_tmo[offset].total_over += extrams;
-		cgpu->usbinfo.usb_tmo[offset].total_tmo += timeout;
-		if (cgpu->usbinfo.usb_tmo[offset].min_tmo == 0) {
-			cgpu->usbinfo.usb_tmo[offset].min_tmo = totms;
-			cgpu->usbinfo.usb_tmo[offset].max_tmo = totms;
-		} else {
-			if (cgpu->usbinfo.usb_tmo[offset].min_tmo > totms)
-				cgpu->usbinfo.usb_tmo[offset].min_tmo = totms;
-			if (cgpu->usbinfo.usb_tmo[offset].max_tmo < totms)
-				cgpu->usbinfo.usb_tmo[offset].max_tmo = totms;
-		}
-	}
-
-	details = &(usb_stats[cgpu->usbinfo.usbstat - 1].details[cmd * 2 + seq]);
-	details->modes |= mode;
-
-	diff = tdiff(tv_finish, tv_start);
-
-	switch (err) {
-		case LIBUSB_SUCCESS:
-			item = CMD_CMD;
-			break;
-		case LIBUSB_ERROR_TIMEOUT:
-			item = CMD_TIMEOUT;
-			break;
-		default:
-			item = CMD_ERROR;
-			break;
-	}
-
-	if (details->item[item].count == 0) {
-		details->item[item].min_delay = diff;
-		cg_memcpy(&(details->item[item].first), tv_start, sizeof(*tv_start));
-	} else if (diff < details->item[item].min_delay)
-		details->item[item].min_delay = diff;
-
-	if (diff > details->item[item].max_delay)
-		details->item[item].max_delay = diff;
-
-	details->item[item].total_delay += diff;
-	cg_memcpy(&(details->item[item].last), tv_start, sizeof(*tv_start));
-	details->item[item].count++;
-}
-
-static void rejected_inc(struct cgpu_info *cgpu, uint32_t mode)
-{
-	struct cg_usb_stats_details *details;
-	int item = CMD_ERROR;
-
-	if (cgpu->usbinfo.usbstat < 1)
-		newstats(cgpu);
-
-	details = &(usb_stats[cgpu->usbinfo.usbstat - 1].details[C_REJECTED * 2 + 0]);
-	details->modes |= mode;
-	details->item[item].count++;
-}
-#endif
 
 #define USB_RETRY_MAX 5
 
@@ -2195,19 +1948,10 @@ usb_perform_transfer(struct cgpu_info *cgpu, struct cg_usb_device *usbdev, int i
 	unsigned char endpoint;
 	bool interrupt;
 	int err, errn;
-#if DO_USB_STATS
-	struct timeval tv_start, tv_finish;
-#endif
 	unsigned char buf[512];
-#ifdef WIN32
-	/* On windows the callback_timeout is a safety mechanism only. */
-	bulk_timeout = timeout;
-	callback_timeout += WIN_CALLBACK_EXTRA;
-#else
 	/* We give the transfer no timeout since we manage timeouts ourself on
 	 * non windows. */
 	bulk_timeout = 0;
-#endif
 
 	usb_epinfo = &(usbdev->found->intinfos[intinfo].epinfos[epinfo]);
 	interrupt = usb_epinfo->att == LIBUSB_TRANSFER_TYPE_INTERRUPT;
@@ -2228,13 +1972,6 @@ err_retry:
 		 * only do this for bulk transfer, not interrupt. */
 		if (!interrupt)
 		ut.transfer->flags |= LIBUSB_TRANSFER_ADD_ZERO_PACKET;
-#endif
-#ifdef WIN32
-		/* Writes on windows really don't like to be cancelled, but
-		 * are prone to timeouts under heavy USB traffic, so make this
-		 * a last resort cancellation delayed long after the write
-		 * would have timed out on its own. */
-		callback_timeout += WIN_WRITE_CBEXTRA;
 #endif
 	}
 
@@ -2607,9 +2344,6 @@ out:
 int __usb_transfer(struct cgpu_info *cgpu, uint8_t request_type, uint8_t bRequest, uint16_t wValue, uint16_t wIndex, uint32_t *data, int siz, unsigned int timeout, __maybe_unused enum usb_cmds cmd)
 {
 	struct cg_usb_device *usbdev;
-#if DO_USB_STATS
-	struct timeval tv_start, tv_finish;
-#endif
 	unsigned char buf[64];
 	uint32_t *buf32 = (uint32_t *)buf;
 	int err, i, bufsiz;
@@ -2677,9 +2411,6 @@ int _usb_transfer(struct cgpu_info *cgpu, uint8_t request_type, uint8_t bRequest
 int _usb_transfer_read(struct cgpu_info *cgpu, uint8_t request_type, uint8_t bRequest, uint16_t wValue, uint16_t wIndex, char *buf, int bufsiz, int *amount, unsigned int timeout, __maybe_unused enum usb_cmds cmd)
 {
 	struct cg_usb_device *usbdev;
-#if DO_USB_STATS
-	struct timeval tv_start, tv_finish;
-#endif
 	unsigned char tbuf[64];
 	int err, pstate;
 
@@ -2890,18 +2621,7 @@ void usb_cleanup(void)
 	for (i = 0; i < total_devices; i++) {
 		cgpu = devices[i];
 		switch (cgpu->drv->drv_id) {
-			case DRIVER_bflsc:
-			case DRIVER_bitforce:
-			case DRIVER_bitfury:
-			case DRIVER_cointerra:
-			case DRIVER_drillbit:
-			case DRIVER_modminer:
-			case DRIVER_icarus:
-			case DRIVER_avalon:
 			case DRIVER_bitmain:
-			case DRIVER_bmsc:
-			case DRIVER_klondike:
-			case DRIVER_hashfast:
 				DEVWLOCK(cgpu, pstate);
 				release_cgpu(cgpu);
 				DEVWUNLOCK(cgpu, pstate);
@@ -3045,173 +2765,27 @@ void usb_initialise(void)
 	}
 }
 
-#ifndef WIN32
 #include <errno.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/file.h>
 #include <fcntl.h>
 
-#ifndef __APPLE__
+
 union semun {
 	int val;
 	struct semid_ds *buf;
 	unsigned short *array;
 	struct seminfo *__buf;
 };
-#endif
 
-#else
-static LPSECURITY_ATTRIBUTES unsec(LPSECURITY_ATTRIBUTES sec)
-{
-	FreeSid(((PSECURITY_DESCRIPTOR)(sec->lpSecurityDescriptor))->Group);
-	free(sec->lpSecurityDescriptor);
-	free(sec);
-	return NULL;
-}
 
-static LPSECURITY_ATTRIBUTES mksec(const char *dname, uint8_t bus_number, uint8_t device_address)
-{
-	SID_IDENTIFIER_AUTHORITY SIDAuthWorld = {SECURITY_WORLD_SID_AUTHORITY};
-	PSID gsid = NULL;
-	LPSECURITY_ATTRIBUTES sec_att = NULL;
-	PSECURITY_DESCRIPTOR sec_des = NULL;
-
-	sec_des = malloc(sizeof(*sec_des));
-	if (unlikely(!sec_des))
-		quit(1, "MTX: Failed to malloc LPSECURITY_DESCRIPTOR");
-
-	if (!InitializeSecurityDescriptor(sec_des, SECURITY_DESCRIPTOR_REVISION)) {
-		applog(LOG_ERR,
-			"MTX: %s (%d:%d) USB failed to init secdes err (%d)",
-			dname, (int)bus_number, (int)device_address,
-			(int)GetLastError());
-		free(sec_des);
-		return NULL;
-	}
-
-	if (!SetSecurityDescriptorDacl(sec_des, TRUE, NULL, FALSE)) {
-		applog(LOG_ERR,
-			"MTX: %s (%d:%d) USB failed to secdes dacl err (%d)",
-			dname, (int)bus_number, (int)device_address,
-			(int)GetLastError());
-		free(sec_des);
-		return NULL;
-	}
-
-	if(!AllocateAndInitializeSid(&SIDAuthWorld, 1, SECURITY_WORLD_RID, 0, 0, 0, 0, 0, 0, 0, &gsid)) {
-		applog(LOG_ERR,
-			"MTX: %s (%d:%d) USB failed to create gsid err (%d)",
-			dname, (int)bus_number, (int)device_address,
-			(int)GetLastError());
-		free(sec_des);
-		return NULL;
-	}
-
-	if (!SetSecurityDescriptorGroup(sec_des, gsid, FALSE)) {
-		applog(LOG_ERR,
-			"MTX: %s (%d:%d) USB failed to secdes grp err (%d)",
-			dname, (int)bus_number, (int)device_address,
-			(int)GetLastError());
-		FreeSid(gsid);
-		free(sec_des);
-		return NULL;
-	}
-
-	sec_att = malloc(sizeof(*sec_att));
-	if (unlikely(!sec_att))
-		quit(1, "MTX: Failed to malloc LPSECURITY_ATTRIBUTES");
-
-	sec_att->nLength = sizeof(*sec_att);
-	sec_att->lpSecurityDescriptor = sec_des;
-	sec_att->bInheritHandle = FALSE;
-
-	return sec_att;
-}
-#endif
 
 // Any errors should always be printed since they will rarely if ever occur
 // and thus it is best to always display them
 static bool resource_lock(const char *dname, uint8_t bus_number, uint8_t device_address)
 {
 	applog(LOG_DEBUG, "USB res lock %s %d-%d", dname, (int)bus_number, (int)device_address);
-#if 0
-	struct cgpu_info *cgpu;
-	LPSECURITY_ATTRIBUTES sec;
-	HANDLE usbMutex;
-	char name[64];
-	DWORD res;
-	int i;
-
-	if (is_in_use_bd(bus_number, device_address))
-		return false;
-
-	snprintf(name, sizeof(name), "cg-usb-%d-%d", (int)bus_number, (int)device_address);
-
-	sec = mksec(dname, bus_number, device_address);
-	if (!sec)
-		return false;
-
-	usbMutex = CreateMutex(sec, FALSE, name);
-	if (usbMutex == NULL) {
-		applog(LOG_ERR,
-			"MTX: %s USB failed to get '%s' err (%d)",
-			dname, name, (int)GetLastError());
-		sec = unsec(sec);
-		return false;
-	}
-
-	res = WaitForSingleObject(usbMutex, 0);
-
-	switch(res) {
-		case WAIT_OBJECT_0:
-		case WAIT_ABANDONED:
-			// Am I using it already?
-			for (i = 0; i < total_devices; i++) {
-				cgpu = get_devices(i);
-				if (cgpu->usbinfo.bus_number == bus_number &&
-				    cgpu->usbinfo.device_address == device_address &&
-				    cgpu->usbinfo.nodev == false) {
-					if (ReleaseMutex(usbMutex)) {
-						applog(LOG_WARNING,
-							"MTX: %s USB can't get '%s' - device in use",
-							dname, name);
-						goto fail;
-					}
-					applog(LOG_ERR,
-						"MTX: %s USB can't get '%s' - device in use - failure (%d)",
-						dname, name, (int)GetLastError());
-					goto fail;
-				}
-			}
-			break;
-		case WAIT_TIMEOUT:
-			if (!hotplug_mode)
-				applog(LOG_WARNING,
-					"MTX: %s USB failed to get '%s' - device in use",
-					dname, name);
-			goto fail;
-		case WAIT_FAILED:
-			applog(LOG_ERR,
-				"MTX: %s USB failed to get '%s' err (%d)",
-				dname, name, (int)GetLastError());
-			goto fail;
-		default:
-			applog(LOG_ERR,
-				"MTX: %s USB failed to get '%s' unknown reply (%d)",
-				dname, name, (int)res);
-			goto fail;
-	}
-
-	add_in_use(bus_number, device_address, false);
-	in_use_store_ress(bus_number, device_address, (void *)usbMutex, (void *)sec);
-
-	return true;
-fail:
-	CloseHandle(usbMutex);
-	sec = unsec(sec);
-	return false;
-#else
 	char name[64];
 	int fd;
 
@@ -3235,7 +2809,6 @@ fail:
 	add_in_use(bus_number, device_address, false);
 	in_use_store_fd(bus_number, device_address, fd);
 	return true;
-#endif
 }
 
 // Any errors should always be printed since they will rarely if ever occur
@@ -3244,32 +2817,6 @@ static void resource_unlock(const char *dname, uint8_t bus_number, uint8_t devic
 {
 	applog(LOG_DEBUG, "USB res unlock %s %d-%d", dname, (int)bus_number, (int)device_address);
 
-#if 0
-	LPSECURITY_ATTRIBUTES sec = NULL;
-	HANDLE usbMutex = NULL;
-	char name[64];
-
-	snprintf(name, sizeof(name), "cg-usb-%d-%d", (int)bus_number, (int)device_address);
-
-	in_use_get_ress(bus_number, device_address, (void **)(&usbMutex), (void **)(&sec));
-
-	if (!usbMutex || !sec)
-		goto fila;
-
-	if (!ReleaseMutex(usbMutex))
-		applog(LOG_ERR,
-			"MTX: %s USB failed to release '%s' err (%d)",
-			dname, name, (int)GetLastError());
-
-fila:
-
-	if (usbMutex)
-		CloseHandle(usbMutex);
-	if (sec)
-		unsec(sec);
-	remove_in_use(bus_number, device_address);
-	return;
-#else
 	char name[64];
 	int fd;
 
@@ -3282,7 +2829,6 @@ fila:
 	close(fd);
 	unlink(name);
 	return;
-#endif
 }
 
 static void resource_process()
@@ -3357,7 +2903,8 @@ void initialise_usblocks(void)
 	cglock_init(&cgusb_fd_lock);
 }
 
-#ifdef USE_BITMAIN
+
+// bitmain stuff. Simplify ?
 
 struct cgpu_info *btm_alloc_cgpu(struct device_drv *drv, int threads)
 {
@@ -3394,65 +2941,12 @@ struct cgpu_info *btm_free_cgpu(struct cgpu_info *cgpu)
 
 bool btm_init(struct cgpu_info *cgpu, const char * devpath)
 {
-#if 0
-	int fd = -1;
-	signed short timeout = 1;
-	unsigned long baud = 115200;
-	bool purge = true;
-	HANDLE hSerial = NULL;
-	applog(LOG_DEBUG, "btm_init cgpu->device_fd=%d", cgpu->device_fd);
-	if(cgpu->device_fd >= 0) {
-		return false;
-	}
-	hSerial = CreateFile(devpath, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
-	if (unlikely(hSerial == INVALID_HANDLE_VALUE))
-	{
-		DWORD e = GetLastError();
-		switch (e) {
-		case ERROR_ACCESS_DENIED:
-			applog(LOG_DEBUG, "Do not have user privileges required to open %s", devpath);
-			break;
-		case ERROR_SHARING_VIOLATION:
-			applog(LOG_DEBUG, "%s is already in use by another process", devpath);
-			break;
-		default:
-			applog(LOG_DEBUG, "Open %s failed, GetLastError:%d", devpath, (int)e);
-			break;
-		}
-	} else {
-		// thanks to af_newbie for pointers about this
-		COMMCONFIG comCfg = {0};
-		comCfg.dwSize = sizeof(COMMCONFIG);
-		comCfg.wVersion = 1;
-		comCfg.dcb.DCBlength = sizeof(DCB);
-		comCfg.dcb.BaudRate = baud;
-		comCfg.dcb.fBinary = 1;
-		comCfg.dcb.fDtrControl = DTR_CONTROL_ENABLE;
-		comCfg.dcb.fRtsControl = RTS_CONTROL_ENABLE;
-		comCfg.dcb.ByteSize = 8;
-
-		SetCommConfig(hSerial, &comCfg, sizeof(comCfg));
-
-		// Code must specify a valid timeout value (0 means don't timeout)
-		const DWORD ctoms = (timeout * 100);
-		COMMTIMEOUTS cto = {ctoms, 0, ctoms, 0, ctoms};
-		SetCommTimeouts(hSerial, &cto);
-
-		if (purge) {
-			PurgeComm(hSerial, PURGE_RXABORT);
-			PurgeComm(hSerial, PURGE_TXABORT);
-			PurgeComm(hSerial, PURGE_RXCLEAR);
-			PurgeComm(hSerial, PURGE_TXCLEAR);
-		}
-		fd = _open_osfhandle((intptr_t)hSerial, 0);
-	}
-#else
 	int fd = -1;
 	if(cgpu->device_fd >= 0) {
 		return false;
 	}
 	fd = open(devpath, O_RDWR|O_EXCL|O_NONBLOCK);
-#endif
+
 	if(fd == -1) {
 		applog(LOG_DEBUG, "%s open %s error %d",
 				cgpu->drv->dname, devpath, errno);
@@ -3514,4 +3008,3 @@ int btm_write(struct cgpu_info *cgpu, char *buf, size_t bufsize)
 	return err;
 }
 
-#endif

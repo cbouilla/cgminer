@@ -192,34 +192,9 @@ extern unsigned char bit_swap_table[256];
  * trying to claim same chip but different devices. Adding a device here will
  * update all macros in the code that use the *_PARSE_COMMANDS macros for each
  * listed driver. */
-#define FPGA_PARSE_COMMANDS(DRIVER_ADD_COMMAND) \
-	DRIVER_ADD_COMMAND(bitforce) \
-	DRIVER_ADD_COMMAND(modminer)
-
-#define ASIC_PARSE_COMMANDS(DRIVER_ADD_COMMAND) \
-	DRIVER_ADD_COMMAND(bitmain) \
-	DRIVER_ADD_COMMAND(bmsc) \
-	DRIVER_ADD_COMMAND(avalon) \
-	DRIVER_ADD_COMMAND(avalon2) \
-	DRIVER_ADD_COMMAND(bflsc) \
-	DRIVER_ADD_COMMAND(bitfury) \
-	DRIVER_ADD_COMMAND(blockerupter) \
-	DRIVER_ADD_COMMAND(cointerra) \
-	DRIVER_ADD_COMMAND(hashfast) \
-	DRIVER_ADD_COMMAND(hashratio) \
-	DRIVER_ADD_COMMAND(icarus) \
-	DRIVER_ADD_COMMAND(klondike) \
-	DRIVER_ADD_COMMAND(knc) \
-	DRIVER_ADD_COMMAND(bitmineA1) \
-	DRIVER_ADD_COMMAND(drillbit) \
-	DRIVER_ADD_COMMAND(bab) \
-	DRIVER_ADD_COMMAND(minion) \
-	DRIVER_ADD_COMMAND(sp10) \
-	DRIVER_ADD_COMMAND(sp30)
-
+	
 #define DRIVER_PARSE_COMMANDS(DRIVER_ADD_COMMAND) \
-	FPGA_PARSE_COMMANDS(DRIVER_ADD_COMMAND) \
-	ASIC_PARSE_COMMANDS(DRIVER_ADD_COMMAND)
+	DRIVER_ADD_COMMAND(bitmain)
 
 #define DRIVER_ENUM(X) DRIVER_##X,
 #define DRIVER_PROTOTYPE(X) struct device_drv X##_drv;

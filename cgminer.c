@@ -2959,8 +2959,8 @@ static void hashmeter(int thr_id, uint64_t hashes_done)
 		g_local_mhashes_dones[g_local_mhashes_index] += hashes_done;
 	total_secs = tdiff(&total_tv_end, &total_tv_start);
 
-	if(total_secs - last_total_secs > 86400) {
-		applog(LOG_ERR, "cgminer time error total_secs = %d last_total_secs = %d", total_secs, last_total_secs);
+	if (total_secs - last_total_secs > 86400) {
+		applog(LOG_ERR, "cgminer time error total_secs = %.0f last_total_secs = %.0f", total_secs, last_total_secs);
 		mutex_unlock(&hash_lock);
 		zero_stats();
 		mutex_lock(&hash_lock);
@@ -3926,7 +3926,7 @@ static void gen_stratum_work(struct pool *pool, struct work *work)
 	local_work++;
 	if((time(NULL) - local_work_lasttime) > 5) {
 		int diff = local_work - local_work_last;
-		applog(LOG_DEBUG, "local_work 5s gen work count:%d", diff/(time(NULL) - local_work_lasttime));
+		applog(LOG_DEBUG, "local_work 5s gen work count: %ld", diff/(time(NULL) - local_work_lasttime));
 		local_work_lasttime = time(NULL);
 		local_work_last = local_work;
 	}
@@ -4192,6 +4192,7 @@ void submit_nonce_2(struct work *work)
 
 bool submit_nonce_direct(struct thr_info *thr, struct work *work, uint32_t nonce)
 {
+	(void) thr;
 	struct work *work_out;
 	uint32_t *work_nonce = (uint32_t *)(work->data + 64 + 12);
 	*work_nonce = htole32(nonce);
@@ -5655,8 +5656,6 @@ static void probe_pools(void)
 	}
 }
 
-#define DRIVER_FILL_DEVICE_DRV(X) fill_device_drv(&X##_drv);
-#define DRIVER_DRV_DETECT_ALL(X) X##_drv.drv_detect(false);
 
 #ifdef USE_USBUTILS
 static void *libusb_poll_thread(void __maybe_unused *arg)
@@ -5857,11 +5856,9 @@ int main(int argc, char *argv[])
 		early_quit(1, "usb resource thread create failed");
 	pthread_detach(thr->pth);
 
-	/* Use the DRIVER_PARSE_COMMANDS macro to fill all the device_drvs */
-	DRIVER_PARSE_COMMANDS(DRIVER_FILL_DEVICE_DRV)
-
-	/* Use the DRIVER_PARSE_COMMANDS macro to detect all devices */
-	DRIVER_PARSE_COMMANDS(DRIVER_DRV_DETECT_ALL)
+	// setup driver
+	fill_device_drv(&bitmain_drv);
+	bitmain_drv.drv_detect(false);
 
 	mining_threads = 0;
 	for (i = 0; i < total_devices; ++i)
