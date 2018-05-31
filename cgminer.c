@@ -1,4 +1,21 @@
 /*
+ * Version courte. la fonction main() invoque gen_stratum_work() dans une boucle.
+ * Ceci prépare un objet work. Il est ensuite enfilé dans une queue avec stage_work(), 
+ * qui invoque hash_push(). La table de hachage est nommée staged_work (cf. uthash.h).
+ * 
+ * Parallèlement, le thread de minage exécute hash_queued_work(). Là, une boucle infinie 
+ * exécute fill_queue(). Là, get_work() est appelé tant que nécessaire. Cela invoque hash_pop() 
+ * pour récupérer un work dans la table de hachage staged_work. Le processus est répété 
+ * tant que driver-bitmain/bitmain_fill() décide que c'est suffisant.
+ *
+ * Apparement, le device gère un FIFO, dont il communique la taille lors de l'initialisation.
+ * 
+ * bitmain_fill gère aussi une AUTRE queue, planquée dans cgpu. Tant qu'elle n'est pas pleine, 
+ * la fonction get_queued() est invoquée. Celle-ci récupère un éventuel work dans cgpu->unqueued_work,
+ * et s'il est présent il est ajouté à la file d'attente dans cgpu->queued_work.
+ *
+ * La queue "logicielle" est de taille 4000, la queue matérielle de taille 16000, apparemment.
+ *
  * Copyright 2011-2014 Con Kolivas
  * Copyright 2011-2012 Luke Dashjr
  * Copyright 2010 Jeff Garzik
