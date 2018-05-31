@@ -40,7 +40,6 @@ char *curly = ":D";
 
 #include "compat.h"
 #include "miner.h"
-#include "bench_block.h"
 #include "usbutils.h"
 
 #include <errno.h>
@@ -647,25 +646,6 @@ void get_intrange(char *arg, int *val1, int *val2)
 {
 	if (sscanf(arg, "%d-%d", val1, val2) == 1)
 		*val2 = *val1;
-}
-
-
-/* Detect that url is for a stratum protocol either via the presence of
- * stratum+tcp or by detecting a stratum server response */
-bool detect_stratum(struct pool *pool, char *url)
-{
-	check_extranonce_option(pool, url);
-	if (!extract_sockaddr(url, &pool->sockaddr_url, &pool->stratum_port))
-		return false;
-
-	if (!strncasecmp(url, "stratum+tcp://", 14)) {
-		pool->rpc_url = strdup(url);
-		pool->has_stratum = true;
-		pool->stratum_url = pool->sockaddr_url;
-		return true;
-	}
-
-	return false;
 }
 
 
@@ -3317,6 +3297,9 @@ static void *stratum_rthread(void *userdata)
 		if (!parse_method(pool, s) && !parse_stratum_response(pool, s))
 			applog(LOG_INFO, "Unknown stratum msg: %s", s);
 		else if (pool->swork.clean) {
+
+
+			// charles: this is the important part
 			struct work *work = make_work();
 
 			/* Generate a single work item to update the current
@@ -3536,7 +3519,7 @@ static bool pool_active(struct pool *pool, bool pinging)
 
 	/* This is the central point we activate stratum when we can */
 retry_stratum:
-	if (pool->has_stratum) {
+	if (1) {
 		/* We create the stratum thread for each pool just after
 		 * successful authorisation. Once the init flag has been set
 		 * we never unset it and the stratum thread is responsible for
@@ -4253,157 +4236,6 @@ static void mt_disable(struct thr_info *mythr, const int thr_id,
 	drv->thread_enable(mythr);
 }
 
-/* The main hashing loop for devices that are slow enough to work on one work
- * item at a time, without a queue, aborting work before the entire nonce
- * range has been hashed if needed. */
-static void hash_sole_work(struct thr_info *mythr)
-{
-	const int thr_id = mythr->id;
-	struct cgpu_info *cgpu = mythr->cgpu;
-	struct device_drv *drv = cgpu->drv;
-	struct timeval getwork_start, tv_start, *tv_end, tv_workstart, tv_lastupdate;
-	struct cgminer_stats *dev_stats = &(cgpu->cgminer_stats);
-	struct cgminer_stats *pool_stats;
-	/* Try to cycle approximately 5 times before each log update */
-	const long cycle = opt_log_interval / 5 ? : 1;
-	const bool primary = (!mythr->device_thread) || mythr->primary_thread;
-	struct timeval diff, sdiff, wdiff = {0, 0};
-	uint32_t max_nonce = drv->can_limit_work(mythr);
-	int64_t hashes_done = 0;
-
-	tv_end = &getwork_start;
-	cgtime(&getwork_start);
-	sdiff.tv_sec = sdiff.tv_usec = 0;
-	cgtime(&tv_lastupdate);
-
-	while (likely(!cgpu->shutdown)) {
-		struct work *work = get_work(mythr, thr_id);
-		int64_t hashes;
-
-		mythr->work_restart = false;
-		cgpu->new_work = true;
-
-		cgtime(&tv_workstart);
-		work->nonce = 0;
-		cgpu->max_hashes = 0;
-		if (!drv->prepare_work(mythr, work)) {
-			applog(LOG_ERR, "work prepare failed, exiting "
-				"mining thread %d", thr_id);
-			break;
-		}
-		work->device_diff = MIN(drv->max_diff, work->work_difficulty);
-		work->device_diff = MAX(drv->min_diff, work->device_diff);
-
-		do {
-			cgtime(&tv_start);
-
-			subtime(&tv_start, &getwork_start);
-
-			addtime(&getwork_start, &dev_stats->getwork_wait);
-			if (time_more(&getwork_start, &dev_stats->getwork_wait_max))
-				copy_time(&dev_stats->getwork_wait_max, &getwork_start);
-			if (time_less(&getwork_start, &dev_stats->getwork_wait_min))
-				copy_time(&dev_stats->getwork_wait_min, &getwork_start);
-			dev_stats->getwork_calls++;
-
-			pool_stats = &(work->pool->cgminer_stats);
-
-			addtime(&getwork_start, &pool_stats->getwork_wait);
-			if (time_more(&getwork_start, &pool_stats->getwork_wait_max))
-				copy_time(&pool_stats->getwork_wait_max, &getwork_start);
-			if (time_less(&getwork_start, &pool_stats->getwork_wait_min))
-				copy_time(&pool_stats->getwork_wait_min, &getwork_start);
-			pool_stats->getwork_calls++;
-
-			cgtime(&(work->tv_work_start));
-
-			/* Only allow the mining thread to be cancelled when
-			 * it is not in the driver code. */
-			pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-
-			thread_reportin(mythr);
-			hashes = drv->scanhash(mythr, work, work->nonce + max_nonce);
-			thread_reportout(mythr);
-
-			pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-			pthread_testcancel();
-
-			/* tv_end is == &getwork_start */
-			cgtime(&getwork_start);
-
-			if (unlikely(hashes == -1)) {
-				applog(LOG_ERR, "%s %d failure, disabling!", drv->name, cgpu->device_id);
-				cgpu->deven = DEV_DISABLED;
-				dev_error(cgpu, REASON_THREAD_ZERO_HASH);
-				cgpu->shutdown = true;
-				break;
-			}
-
-			hashes_done += hashes;
-			if (hashes > cgpu->max_hashes)
-				cgpu->max_hashes = hashes;
-
-			timersub(tv_end, &tv_start, &diff);
-			sdiff.tv_sec += diff.tv_sec;
-			sdiff.tv_usec += diff.tv_usec;
-			if (sdiff.tv_usec > 1000000) {
-				++sdiff.tv_sec;
-				sdiff.tv_usec -= 1000000;
-			}
-
-			timersub(tv_end, &tv_workstart, &wdiff);
-
-			if (unlikely((long)sdiff.tv_sec < cycle)) {
-				int mult;
-
-				if (likely(max_nonce == 0xffffffff))
-					continue;
-
-				mult = 1000000 / ((sdiff.tv_usec + 0x400) / 0x400) + 0x10;
-				mult *= cycle;
-				if (max_nonce > (0xffffffff * 0x400) / mult)
-					max_nonce = 0xffffffff;
-				else
-					max_nonce = (max_nonce * mult) / 0x400;
-			} else if (unlikely(sdiff.tv_sec > cycle))
-				max_nonce = max_nonce * cycle / sdiff.tv_sec;
-			else if (unlikely(sdiff.tv_usec > 100000))
-				max_nonce = max_nonce * 0x400 / (((cycle * 1000000) + sdiff.tv_usec) / (cycle * 1000000 / 0x400));
-
-			timersub(tv_end, &tv_lastupdate, &diff);
-			/* Update the hashmeter at most 5 times per second */
-			if ((hashes_done && (diff.tv_sec > 0 || diff.tv_usec > 200000)) ||
-			    diff.tv_sec >= opt_log_interval) {
-				hashmeter(thr_id, hashes_done);
-				hashes_done = 0;
-				copy_time(&tv_lastupdate, tv_end);
-			}
-
-			if (unlikely(mythr->work_restart)) {
-				/* Apart from device_thread 0, we stagger the
-				 * starting of every next thread to try and get
-				 * all devices busy before worrying about
-				 * getting work for their extra threads */
-				if (!primary) {
-					struct timespec rgtp;
-
-					rgtp.tv_sec = 0;
-					rgtp.tv_nsec = 250 * mythr->device_thread * 1000000;
-					nanosleep(&rgtp, NULL);
-				}
-				break;
-			}
-
-			if (unlikely(mythr->pause || cgpu->deven != DEV_ENABLED))
-				mt_disable(mythr, thr_id, drv);
-
-			sdiff.tv_sec = sdiff.tv_usec = 0;
-		} while (!abandon_work(work, &wdiff, cgpu->max_hashes));
-		free_work(work);
-	}
-	cgpu->deven = DEV_DISABLED;
-}
-
 /* Put a new unqueued work item in cgpu->unqueued_work under cgpu->qlock till
  * the driver tells us it's full so that it may extract the work item using
  * the get_queued() function which adds it to the hashtable on
@@ -4666,6 +4498,8 @@ void flush_queue(struct cgpu_info *cgpu)
  * directly. */
 void hash_queued_work(struct thr_info *mythr)
 {
+	// charles : here is where the actual fun takes place.
+
 	struct timeval tv_start = {0, 0}, tv_end;
 	struct cgpu_info *cgpu = mythr->cgpu;
 	struct device_drv *drv = cgpu->drv;
@@ -4713,56 +4547,6 @@ void hash_queued_work(struct thr_info *mythr)
 	cgpu->deven = DEV_DISABLED;
 }
 
-/* This version of hash_work is for devices drivers that want to do their own
- * work management entirely, usually by using get_work(). Note that get_work
- * is a blocking function and will wait indefinitely if no work is available
- * so this must be taken into consideration in the driver. */
-void hash_driver_work(struct thr_info *mythr)
-{
-	struct timeval tv_start = {0, 0}, tv_end;
-	struct cgpu_info *cgpu = mythr->cgpu;
-	struct device_drv *drv = cgpu->drv;
-	const int thr_id = mythr->id;
-	int64_t hashes_done = 0;
-
-	while (likely(!cgpu->shutdown)) {
-		struct timeval diff;
-		int64_t hashes;
-
-		mythr->work_update = false;
-
-		hashes = drv->scanwork(mythr);
-
-		/* Reset the bool here in case the driver looks for it
-		 * synchronously in the scanwork loop. */
-		mythr->work_restart = false;
-
-		if (unlikely(hashes == -1 )) {
-			applog(LOG_ERR, "%s %d failure, disabling!", drv->name, cgpu->device_id);
-			cgpu->deven = DEV_DISABLED;
-			dev_error(cgpu, REASON_THREAD_ZERO_HASH);
-			break;
-		}
-
-		hashes_done += hashes;
-		cgtime(&tv_end);
-		timersub(&tv_end, &tv_start, &diff);
-		/* Update the hashmeter at most 5 times per second */
-		if ((hashes_done && (diff.tv_sec > 0 || diff.tv_usec > 200000)) ||
-		    diff.tv_sec >= opt_log_interval) {
-			hashmeter(thr_id, hashes_done);
-			hashes_done = 0;
-			copy_time(&tv_start, &tv_end);
-		}
-
-		if (unlikely(mythr->pause || cgpu->deven != DEV_ENABLED))
-			mt_disable(mythr, thr_id, drv);
-
-		if (mythr->work_update)
-			drv->update_work(cgpu);
-	}
-	cgpu->deven = DEV_DISABLED;
-}
 
 void *miner_thread(void *userdata)
 {
@@ -5382,38 +5166,37 @@ static void noop_hash_work(struct thr_info __maybe_unused *thr)
 /* Fill missing driver drv functions with noops */
 void fill_device_drv(struct device_drv *drv)
 {
-	if (!drv->drv_detect)
-		drv->drv_detect = &noop_detect;
-	if (!drv->reinit_device)
-		drv->reinit_device = &noop_reinit_device;
-	if (!drv->get_statline_before)
-		drv->get_statline_before = &blank_get_statline_before;
-	if (!drv->get_statline)
-		drv->get_statline = &noop_get_statline;
+	//if (!drv->drv_detect)
+//		drv->drv_detect = &noop_detect;
+//	if (!drv->reinit_device)
+//		drv->reinit_device = &noop_reinit_device;
+//	if (!drv->get_statline_before)
+//		drv->get_statline_before = &blank_get_statline_before;
+//	if (!drv->get_statline)
+//		drv->get_statline = &noop_get_statline;
 	if (!drv->get_stats)
 		drv->get_stats = &noop_get_stats;
-	if (!drv->thread_prepare)
-		drv->thread_prepare = &noop_thread_prepare;
+//	if (!drv->thread_prepare)
+//		drv->thread_prepare = &noop_thread_prepare;
 	if (!drv->can_limit_work)
 		drv->can_limit_work = &noop_can_limit_work;
 	if (!drv->thread_init)
 		drv->thread_init = &noop_thread_init;
-	if (!drv->prepare_work)
 		drv->prepare_work = &noop_prepare_work;
 	if (!drv->hw_error)
 		drv->hw_error = &noop_hw_error;
-	if (!drv->thread_shutdown)
-		drv->thread_shutdown = &noop_thread_shutdown;
+	//if (!drv->thread_shutdown)
+	//	drv->thread_shutdown = &noop_thread_shutdown;
 	if (!drv->thread_enable)
 		drv->thread_enable = &noop_thread_enable;
-	if (!drv->hash_work)
-		drv->hash_work = &hash_sole_work;
-	if (!drv->flush_work)
-		drv->flush_work = &noop_flush_work;
+	//if (!drv->hash_work)
+	//	drv->hash_work = &hash_sole_work;
+	//if (!drv->flush_work)
+	//	drv->flush_work = &noop_flush_work;
 	if (!drv->update_work)
 		drv->update_work = &noop_update_work;
-	if (!drv->queue_full)
-		drv->queue_full = &noop_queue_full;
+	//if (!drv->queue_full)
+	//	drv->queue_full = &noop_queue_full;
 	if (!drv->zero_stats)
 		drv->zero_stats = &noop_zero_stats;
 	/* If drivers support internal diff they should set a max_diff or
@@ -5925,12 +5708,15 @@ int main(int argc, char *argv[])
 //	if (opt_benchmark || opt_benchfile)
 //		goto begin_bench;
 
+	// sans effet
+	#if 0
 	for (i = 0; i < total_pools; i++) {
 		struct pool *pool  = pools[i];
 
 		enable_pool(pool);
 		pool->idle = true;
 	}
+	#endif
 
 	/* Look for at least one active pool before starting */
 	applog(LOG_NOTICE, "Probing for an alive pool");
@@ -5973,12 +5759,12 @@ begin_bench:
 	cgtime(&tv_hashmeter);
 	get_datestamp(datestamp, sizeof(datestamp), &total_tv_start);
 
-	watchpool_thr_id = 2;
-	thr = &control_thr[watchpool_thr_id];
-	/* start watchpool thread */
-	if (thr_info_create(thr, NULL, watchpool_thread, NULL))
-		early_quit(1, "watchpool thread create failed");
-	pthread_detach(thr->pth);
+	// watchpool_thr_id = 2;
+	// thr = &control_thr[watchpool_thr_id];
+	// /* start watchpool thread */
+	// if (thr_info_create(thr, NULL, watchpool_thread, NULL))
+	// 	early_quit(1, "watchpool thread create failed");
+	// pthread_detach(thr->pth);
 
 	watchdog_thr_id = 3;
 	thr = &control_thr[watchdog_thr_id];
@@ -5987,11 +5773,11 @@ begin_bench:
 		early_quit(1, "watchdog thread create failed");
 	pthread_detach(thr->pth);
 
-	hotplug_thr_id = 6;
-	thr = &control_thr[hotplug_thr_id];
-	if (thr_info_create(thr, NULL, hotplug_thread, thr))
-		early_quit(1, "hotplug thread create failed");
-	pthread_detach(thr->pth);
+	// hotplug_thr_id = 6;
+	// thr = &control_thr[hotplug_thr_id];
+	// if (thr_info_create(thr, NULL, hotplug_thread, thr))
+	// 	early_quit(1, "hotplug thread create failed");
+	// pthread_detach(thr->pth);
 
 	// ATTENTION, J'AI VIRE LE THREAD API
 

@@ -1,1 +1,1 @@
-cgminer --bitmain-dev /dev/bitmain-asic --bitmain-options 115200:32:8:5:200:0782:0725 --bitmain-checkn2diff --bitmain-hwerror --queue 8192
+./cgminer --bitmain-dev /dev/bitmain-asic --bitmain-options 115200:32:8:5:200:0782:0725 --bitmain-checkn2diff --bitmain-hwerror --queue 8192
