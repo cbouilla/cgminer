@@ -14,7 +14,23 @@
  * la fonction get_queued() est invoquée. Celle-ci récupère un éventuel work dans cgpu->unqueued_work,
  * et s'il est présent il est ajouté à la file d'attente dans cgpu->queued_work.
  *
- * La queue "logicielle" est de taille 4000, la queue matérielle de taille 16000, apparemment.
+ * Enfin, un thread est lancé lors de l'initialisation du device et exécute bitmain_get_results.
+ * Cette fonction essaye en permanence de lire le device. Si assez de données ont été accumulées,
+ * alors bitmain_parse_results est invoqué. Il peut s'agir d'info de status ou bien... de nonces.
+ * Dans ce cas, submit_nonce() est invoqué, et à terme submit_tested_work, submit_work_async()
+ *
+ * Côté CGPU, la queue "logicielle" est de taille 4000, la queue matérielle de taille 16000, apparemment.
+ *
+ * Pour la pool stratum : 2 threads (un qui lit les notice et update le staged_work, un qui pousse les résultats)
+ * Pour chaque device : 1 thread qui pousse le staged_work dans la queue du device, et...
+ *
+ * Plan A
+ * ======
+ *    Ignorer le fait qu'il y a zéro pool
+ *    Générer les works en boucle dans main()
+ *    Modifier send_work_async pour sauvegarder les résultats
+ *
+ *
  *
  * Copyright 2011-2014 Con Kolivas
  * Copyright 2011-2012 Luke Dashjr

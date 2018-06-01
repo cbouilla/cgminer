@@ -1185,18 +1185,12 @@ static void bitmain_parse_results(struct cgpu_info *bitmain, struct bitmain_info
 								checkbit = num2bit(r);
 								if (rxstatusdata.chain_asic_exist[n * 8 + m] & checkbit) {
 									if (rxstatusdata.chain_asic_status[n * 8 + m] & checkbit) {
-										info->chain_asic_status_t[n]
-										    [j]
-										    = 'o';
+										info->chain_asic_status_t[n][j] = 'o';
 									} else {
-										info->chain_asic_status_t[n]
-										    [j]
-										    = 'x';
+										info->chain_asic_status_t[n][j] = 'x';
 									}
 								} else {
-									info->chain_asic_status_t[n]
-									    [j]
-									    = '-';
+									info->chain_asic_status_t[n][j] = '-';
 								}
 								j++;
 							}

@@ -1375,6 +1375,7 @@ extern uint64_t share_diff(const struct work *work);
 extern struct thr_info *get_thread(int thr_id);
 extern struct cgpu_info *get_devices(int id);
 
+#if 0
 enum api_data_type {
 	API_ESCAPE,
 	API_STRING,
@@ -1413,6 +1414,7 @@ struct api_data {
 	struct api_data *prev;
 	struct api_data *next;
 };
+#endif
 
 extern void dupalloc(struct cgpu_info *cgpu, int timelimit);
 extern void dupcounters(struct cgpu_info *cgpu, uint64_t *checked, uint64_t *dups);
