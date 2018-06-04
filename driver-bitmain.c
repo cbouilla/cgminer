@@ -42,7 +42,6 @@ char opt_bitmain_dev[256] = { 0 };
 bool opt_bitmain_hwerror = false;
 bool opt_bitmain_checkall = false;
 bool opt_bitmain_checkn2diff = false;
-static const bool opt_bitmain_dev_usb = false;
 bool opt_bitmain_nobeeper = false;
 bool opt_bitmain_notempoverctrl = false;
 bool opt_bitmain_homemode = false;
@@ -1356,15 +1355,6 @@ static void *bitmain_get_results(void *userdata)
 	return NULL;
 }
 
-static void bitmain_set_timeout(struct bitmain_info *info)
-{
-	info->timeout = BITMAIN_TIMEOUT_FACTOR / info->frequency;
-}
-
-static void *bitmain_send_tasks(void *userdata)
-{
-	return NULL;
-}
 
 static void bitmain_init(struct cgpu_info *bitmain)
 {
@@ -1615,14 +1605,6 @@ static int bitmain_initialize(struct cgpu_info *bitmain)
 	return 0;
 }
 
-static void bitmain_usb_init(struct cgpu_info *bitmain)
-{
-	int err, interface;
-
-	return;
-
-}
-
 
 static bool bitmain_detect_one(const char *devpath)
 {
@@ -1720,6 +1702,7 @@ static bool bitmain_detect_one(const char *devpath)
 static void bitmain_detect(bool __maybe_unused hotplug)
 {
 	applog(LOG_DEBUG, "BTM detect dev: %s", opt_bitmain_dev);
+
 	btm_detect(&bitmain_drv, bitmain_detect_one);
 }
 
@@ -1982,10 +1965,6 @@ static void bitmain_flush_work(struct cgpu_info *bitmain)
 	//}
 	//pthread_cond_signal(&info->qcond);
 	mutex_unlock(&info->qlock);
-}
-
-static struct api_data *bitmain_api_stats(struct cgpu_info *cgpu)
-{
 }
 
 static void bitmain_shutdown(struct thr_info *thr)
