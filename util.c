@@ -171,69 +171,6 @@ bool hex2bin(unsigned char *p, const char *hexstr, size_t len)
 	return ret;
 }
 
-static bool _valid_hex(char *s, const char *file, const char *func, const int line)
-{
-	bool ret = false;
-	int i, len;
-
-	if (unlikely(!s)) {
-		applog(LOG_ERR, "Null string passed to valid_hex from"IN_FMT_FFL, file, func, line);
-		return ret;
-	}
-	len = strlen(s);
-	for (i = 0; i < len; i++) {
-		unsigned char idx = s[i];
-
-		if (unlikely(hex2bin_tbl[idx] < 0)) {
-			applog(LOG_ERR, "Invalid char 0x%x passed to valid_hex from"IN_FMT_FFL, idx, file, func, line);
-			return ret;
-		}
-	}
-	ret = true;
-	return ret;
-}
-
-#define valid_hex(s) _valid_hex(s, __FILE__, __func__, __LINE__)
-
-static bool _valid_ascii(char *s, const char *file, const char *func, const int line)
-{
-	bool ret = false;
-	int i, len;
-
-	if (unlikely(!s)) {
-		applog(LOG_ERR, "Null string passed to valid_ascii from"IN_FMT_FFL, file, func, line);
-		return ret;
-	}
-	len = strlen(s);
-	if (unlikely(!len)) {
-		applog(LOG_ERR, "Zero length string passed to valid_ascii from"IN_FMT_FFL, file, func, line);
-		return ret;
-	}
-	for (i = 0; i < len; i++) {
-		unsigned char idx = s[i];
-
-		if (unlikely(idx < 32 || idx > 126)) {
-			applog(LOG_ERR, "Invalid char 0x%x passed to valid_ascii from"IN_FMT_FFL, idx, file, func, line);
-			return ret;
-		}
-	}
-	ret = true;
-	return ret;
-}
-
-#define valid_ascii(s) _valid_ascii(s, __FILE__, __func__, __LINE__)
-
-static const int b58tobin_tbl[] = {
-	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-	-1,  0,  1,  2,  3,  4,  5,  6,  7,  8, -1, -1, -1, -1, -1, -1,
-	-1,  9, 10, 11, 12, 13, 14, 15, 16, -1, 17, 18, 19, 20, 21, -1,
-	22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, -1, -1, -1, -1, -1,
-	-1, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, -1, 44, 45, 46,
-	47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57
-};
-
 /* For encoding variable length strings */
 unsigned char *ser_string(char *s, int *slen)
 {

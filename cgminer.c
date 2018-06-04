@@ -169,8 +169,6 @@ char *opt_usb_select = NULL;
 int opt_usbdump = -1;
 bool opt_usb_list_all;
 cgsem_t usb_resource_sem;
-static pthread_t usb_poll_thread;
-static bool usb_polling;
 
 
 char *opt_kernel_path;
@@ -187,7 +185,7 @@ static int watchdog_thr_id;
 int gpur_thr_id;
 // static int api_thr_id;
 
-static int usbres_thr_id;
+
 static int hotplug_thr_id;
 
 static int total_control_threads;

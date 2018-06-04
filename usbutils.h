@@ -13,6 +13,8 @@
 
 #include "util.h"
 
+struct usb_find_devices {};
+struct libusb_device {};
 
 struct cg_usb_info {
 	uint8_t bus_number;
