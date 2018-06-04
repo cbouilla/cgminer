@@ -40,7 +40,7 @@
 
 char opt_bitmain_dev[256] = { 0 };
 
-bool opt_bitmain_hwerror = false;
+bool opt_bitmain_hwerror = true;
 bool opt_bitmain_checkall = false;
 bool opt_bitmain_checkn2diff = false;
 bool opt_bitmain_nobeeper = false;
