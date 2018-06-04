@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include <pthread.h>
-#include <jansson.h>
+#include <stdio.h>
 
 typedef char CURL;
 extern char *curly;
@@ -25,8 +25,8 @@ extern char *curly;
 #include "util.h"
 #include <sys/types.h>
 
-# include <sys/socket.h>
-# include <netdb.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #include <semaphore.h>
 
@@ -68,8 +68,8 @@ void *alloca (size_t);
  #endif
 #endif
 
-  #include <libusb.h>
-  #include "usbutils.h"
+  
+#include "usbutils.h"
 
 
 #if (!defined(WIN32) && ((__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 3))) \
@@ -374,11 +374,9 @@ struct cgpu_info {
 	void *device_data;
 	void *dup_data;
 	char *unique_id;
-#ifdef USE_USBUTILS
 	struct cg_usb_device *usbdev;
 	struct cg_usb_info usbinfo;
 	bool blacklisted;
-#endif
 
 // bitmain
 	int device_fd;
@@ -635,34 +633,14 @@ extern void _quit(int status);
  */
 #define LOCK_TRACKING 0
 
-#if LOCK_TRACKING
-enum cglock_typ {
-	CGLOCK_MUTEX,
-	CGLOCK_RW,
-	CGLOCK_UNKNOWN
-};
 
-extern uint64_t api_getlock(void *lock, const char *file, const char *func, const int line);
-extern void api_gotlock(uint64_t id, void *lock, const char *file, const char *func, const int line);
-extern uint64_t api_trylock(void *lock, const char *file, const char *func, const int line);
-extern void api_didlock(uint64_t id, int ret, void *lock, const char *file, const char *func, const int line);
-extern void api_gunlock(void *lock, const char *file, const char *func, const int line);
-extern void api_initlock(void *lock, enum cglock_typ typ, const char *file, const char *func, const int line);
 
-#define GETLOCK(_lock, _file, _func, _line) uint64_t _id1 = api_getlock((void *)(_lock), _file, _func, _line)
-#define GOTLOCK(_lock, _file, _func, _line) api_gotlock(_id1, (void *)(_lock), _file, _func, _line)
-#define TRYLOCK(_lock, _file, _func, _line) uint64_t _id2 = api_trylock((void *)(_lock), _file, _func, _line)
-#define DIDLOCK(_ret, _lock, _file, _func, _line) api_didlock(_id2, _ret, (void *)(_lock), _file, _func, _line)
-#define GUNLOCK(_lock, _file, _func, _line) api_gunlock((void *)(_lock), _file, _func, _line)
-#define INITLOCK(_lock, _typ, _file, _func, _line) api_initlock((void *)(_lock), _typ, _file, _func, _line)
-#else
 #define GETLOCK(_lock, _file, _func, _line)
 #define GOTLOCK(_lock, _file, _func, _line)
 #define TRYLOCK(_lock, _file, _func, _line)
 #define DIDLOCK(_ret, _lock, _file, _func, _line)
 #define GUNLOCK(_lock, _file, _func, _line)
 #define INITLOCK(_typ, _lock, _file, _func, _line)
-#endif
 
 #define mutex_lock(_lock) _mutex_lock(_lock, __FILE__, __func__, __LINE__)
 #define mutex_unlock_noyield(_lock) _mutex_unlock_noyield(_lock, __FILE__, __func__, __LINE__)
@@ -887,10 +865,6 @@ static inline void _cg_wunlock(cglock_t *lock, const char *file, const char *fun
 
 struct pool;
 
-#define API_LISTEN_ADDR "0.0.0.0"
-#define API_MCAST_CODE "FTW"
-#define API_MCAST_ADDR "224.0.0.75"
-
 extern bool g_logfile_enable;
 extern char g_logfile_path[256];
 extern char g_logfile_openflag[32];
@@ -973,10 +947,7 @@ extern pthread_mutex_t restart_lock;
 extern pthread_cond_t restart_cond;
 
 extern void set_target(unsigned char *dest_target, double diff);
-#if defined (USE_AVALON2) || defined (USE_HASHRATIO)
-bool submit_nonce2_nonce(struct thr_info *thr, struct pool *pool, struct pool *real_pool,
-			 uint32_t nonce2, uint32_t nonce);
-#endif
+
 extern int restart_wait(struct thr_info *thr, unsigned int mstime);
 
 extern void kill_work(void);

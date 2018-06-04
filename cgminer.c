@@ -282,15 +282,6 @@ const char *opt_socks_proxy = NULL;
 int opt_suggest_diff;
 static const char def_conf[] = "cgminer.conf";
 static const char *default_config;
-static bool config_loaded;
-static int include_count;
-#define JSON_INCLUDE_CONF "include"
-#define JSON_LOAD_ERROR "JSON decode of file '%s' failed\n %s"
-#define JSON_LOAD_ERROR_LEN strlen(JSON_LOAD_ERROR)
-#define JSON_MAX_DEPTH 10
-#define JSON_MAX_DEPTH_ERR "Too many levels of JSON includes (limit 10) or a loop"
-#define JSON_WEB_ERROR "WEB config err"
-
 static int forkpid;
 
 
@@ -594,160 +585,8 @@ static struct opt_table opt_config_table[] = {
 	OPT_ENDTABLE
 };
 
-static char *load_config(const char *arg, void __maybe_unused *unused);
-
 static int fileconf_load;
-
-static char *parse_config(json_t *config, bool fileconf)
-{
-	static char err_buf[200];
-	struct opt_table *opt;
-	const char *str;
-	json_t *val;
-
-	if (fileconf && !fileconf_load)
-		fileconf_load = 1;
-
-	for (opt = opt_config_table; opt->type != OPT_END; opt++) {
-		char *p, *name;
-
-		/* We don't handle subtables. */
-		assert(!(opt->type & OPT_SUBTABLE));
-
-		if (!opt->names)
-			continue;
-
-		/* Pull apart the option name(s). */
-		name = strdup(opt->names);
-		for (p = strtok(name, "|"); p; p = strtok(NULL, "|")) {
-			char *err = NULL;
-
-			/* Ignore short options. */
-			if (p[1] != '-')
-				continue;
-
-			val = json_object_get(config, p+2);
-			if (!val)
-				continue;
-
-			if ((opt->type & (OPT_HASARG | OPT_PROCESSARG)) && json_is_string(val)) {
-				str = json_string_value(val);
-				err = opt->cb_arg(str, opt->u.arg);
-				if (opt->type == OPT_PROCESSARG)
-					opt_set_charp(str, opt->u.arg);
-			} else if ((opt->type & (OPT_HASARG | OPT_PROCESSARG)) && json_is_array(val)) {
-				json_t *arr_val;
-				size_t index;
-
-				json_array_foreach(val, index, arr_val) {
-					if (json_is_string(arr_val)) {
-						str = json_string_value(arr_val);
-						err = opt->cb_arg(str, opt->u.arg);
-						if (opt->type == OPT_PROCESSARG)
-							opt_set_charp(str, opt->u.arg);
-					} else if (json_is_object(arr_val))
-						err = parse_config(arr_val, false);
-					if (err)
-						break;
-				}
-			} else if ((opt->type & OPT_NOARG) && json_is_true(val))
-				err = opt->cb(opt->u.arg);
-			else
-				err = "Invalid value";
-
-			if (err) {
-				/* Allow invalid values to be in configuration
-				 * file, just skipping over them provided the
-				 * JSON is still valid after that. */
-				if (fileconf) {
-					applog(LOG_ERR, "Invalid config option %s: %s", p, err);
-					fileconf_load = -1;
-				} else {
-					snprintf(err_buf, sizeof(err_buf), "Parsing JSON option %s: %s",
-						p, err);
-					return err_buf;
-				}
-			}
-		}
-		free(name);
-	}
-
-	val = json_object_get(config, JSON_INCLUDE_CONF);
-	if (val && json_is_string(val))
-		return load_config(json_string_value(val), NULL);
-
-	return NULL;
-}
-
 char *cnfbuf = NULL;
-
-#ifdef HAVE_LIBCURL
-char conf_web1[] = "http://";
-char conf_web2[] = "https://";
-
-static char *load_web_config(const char *arg)
-{
-	json_t *val = json_web_config(arg);
-
-	if (!val || !json_is_object(val))
-		return JSON_WEB_ERROR;
-
-	if (!cnfbuf)
-		cnfbuf = strdup(arg);
-
-	config_loaded = true;
-
-	return parse_config(val, true);
-}
-#endif
-
-static char *load_config(const char *arg, void __maybe_unused *unused)
-{
-	json_error_t err;
-	json_t *config;
-	char *json_error;
-	size_t siz;
-
-	if (!cnfbuf)
-		cnfbuf = strdup(arg);
-
-	if (++include_count > JSON_MAX_DEPTH)
-		return JSON_MAX_DEPTH_ERR;
-
-	config = json_load_file(arg, 0, &err);
-	if (!json_is_object(config)) {
-		siz = JSON_LOAD_ERROR_LEN + strlen(arg) + strlen(err.text);
-		json_error = malloc(siz);
-		if (!json_error)
-			quit(1, "Malloc failure in json error");
-
-		snprintf(json_error, siz, JSON_LOAD_ERROR, arg, err.text);
-		return json_error;
-	}
-
-	config_loaded = true;
-
-	/* Parse the config now, so we can override it.  That can keep pointers
-	 * so don't free config object. */
-	return parse_config(config, true);
-}
-
-
-void default_save_file(char *filename);
-
-static void load_default_config(void)
-{
-	cnfbuf = malloc(PATH_MAX);
-
-	default_save_file(cnfbuf);
-
-	if (!access(cnfbuf, R_OK))
-		load_config(cnfbuf, NULL);
-	else {
-		free(cnfbuf);
-		cnfbuf = NULL;
-	}
-}
 
 extern const char *opt_argv0;
 
@@ -761,8 +600,6 @@ static char *opt_verusage_and_exit(const char *extra)
 
 char *display_devs(int *ndevs)
 {
-	*ndevs = 0;
-	usb_all(0);
 	exit(*ndevs);
 }
 
@@ -1137,15 +974,6 @@ static void __kill_work(void)
 	sleep(1);
 
 	cg_completion_timeout(&kill_mining, NULL, 3000);
-
-	/* Release USB resources in case it's a restart
-	 * and not a QUIT */
-	forcelog(LOG_DEBUG, "Releasing all USB devices");
-	cg_completion_timeout(&usb_cleanup, NULL, 1000);
-
-	forcelog(LOG_DEBUG, "Killing off usbres thread");
-	thr = &control_thr[usbres_thr_id];
-	kill_timeout(thr);
 }
 
 /* This should be the common exit path */
@@ -1156,11 +984,7 @@ void kill_work(void)
 	quit(0, "Shutdown signal received.");
 }
 
-static
-#ifdef WIN32
-const
-#endif
-char **initial_args;
+static char **initial_args;
 
 static void clean_up(bool restarting);
 
@@ -2002,7 +1826,6 @@ static void submit_work_async(struct work *work)
 	}
 
 	nonce_reported++;
-
 }
 
 void inc_hw_errors(struct thr_info *thr)
@@ -2385,41 +2208,6 @@ void work_completed(struct cgpu_info *cgpu, struct work *work)
 	free_work(work);
 }
 
-/* Combines find_queued_work_bymidstate and work_completed in one function
- * withOUT destroying the work so the driver must free it. */
-struct work *take_queued_work_bymidstate(struct cgpu_info *cgpu, char *midstate, size_t midstatelen, char *data, int offset, size_t datalen)
-{
-	struct work *work;
-
-	wr_lock(&cgpu->qlock);
-	work = __find_work_bymidstate(cgpu->queued_work, midstate, midstatelen, data, offset, datalen);
-	if (work)
-		__work_completed(cgpu, work);
-	wr_unlock(&cgpu->qlock);
-
-	return work;
-}
-
-void flush_queue(struct cgpu_info *cgpu)
-{
-	struct work *work = NULL;
-
-	if (unlikely(!cgpu))
-		return;
-
-	/* Use only a trylock in case we get into a deadlock with a queueing
-	 * function holding the read lock when we're called. */
-	if (wr_trylock(&cgpu->qlock))
-		return;
-	work = cgpu->unqueued_work;
-	cgpu->unqueued_work = NULL;
-	wr_unlock(&cgpu->qlock);
-
-	if (work) {
-		free_work(work);
-		applog(LOG_DEBUG, "Discarded queued work item");
-	}
-}
 
 /* This version of hash work is for devices that are fast enough to always
  * perform a full nonce range and need a queue to maintain the device busy.
@@ -2625,14 +2413,7 @@ void blank_get_statline_before(char *buf, size_t bufsiz, struct cgpu_info __mayb
 static void clean_up(bool restarting)
 {
 	(void) restarting;
-#ifdef USE_USBUTILS
-	usb_polling = false;
-	pthread_join(usb_poll_thread, NULL);
-        libusb_exit(NULL);
-#endif
-
 	cgtime(&total_tv_end);
-
 	curl_global_cleanup();
 }
 
@@ -2912,43 +2693,6 @@ struct device_drv *copy_drv(struct device_drv *drv)
 #endif
 
 
-#ifdef USE_USBUTILS
-static void *libusb_poll_thread(void __maybe_unused *arg)
-{
-	struct timeval tv_end = {1, 0};
-
-	RenameThread("USBPoll");
-
-	while (usb_polling)
-		libusb_handle_events_timeout_completed(NULL, &tv_end, NULL);
-
-	/* Cancel any cancellable usb transfers */
-	cancel_usb_transfers();
-
-	/* Keep event handling going until there are no async transfers in
-	 * flight. */
-	do {
-		libusb_handle_events_timeout_completed(NULL, &tv_end, NULL);
-	} while (async_usb_transfers());
-
-	return NULL;
-}
-
-static void initialise_usb(void) {
-	int err = libusb_init(NULL);
-
-	if (err) {
-		fprintf(stderr, "libusb_init() failed err %d", err);
-		fflush(stderr);
-		quit(1, "libusb_init() failed");
-	}
-	initialise_usblocks();
-	usb_polling = true;
-	pthread_create(&usb_poll_thread, NULL, libusb_poll_thread, NULL);
-}
-#else
-#define initialise_usb() {}
-#endif
 
 int main(int argc, char *argv[])
 {
@@ -3011,7 +2755,6 @@ int main(int argc, char *argv[])
 	/* We use the getq mutex as the staged lock */
 	stgd_lock = &getq->mutex;
 
-	initialise_usb();
 
 	snprintf(packagename, sizeof(packagename), "%s %s", PACKAGE, VERSION);
 
@@ -3054,7 +2797,6 @@ int main(int argc, char *argv[])
 	if (argc != 1)
 		early_quit(1, "Unexpected extra commandline arguments");
 
-	load_default_config();
 
 	if (opt_logfile_path) {
 		g_logfile_enable = true;
@@ -3100,14 +2842,6 @@ int main(int argc, char *argv[])
 	gwsched_thr_id = 0;
 
 	usb_initialise();
-
-	// before device detection
-	cgsem_init(&usb_resource_sem);
-	usbres_thr_id = 1;
-	thr = &control_thr[usbres_thr_id];
-	if (thr_info_create(thr, NULL, usb_resource_thread, thr))
-		early_quit(1, "usb resource thread create failed");
-	pthread_detach(thr->pth);
 
 	// setup driver
 	fill_device_drv(&bitmain_drv);

@@ -18,10 +18,42 @@
 #include "miner.h"
 #include "usbutils.h"
 
+#include <errno.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/file.h>
+#include <fcntl.h>
+
+
 static pthread_mutex_t cgusb_lock;
 static pthread_mutex_t cgusbres_lock;
 static cglock_t cgusb_fd_lock;
 static cgtimer_t usb11_cgt;
+
+// Total device limit
+static int total_count = 0;
+static int total_limit = 999999;
+
+// For device limits by driver
+static struct driver_count {
+	int count;
+	int limit;
+} drv_count[DRIVER_MAX];
+
+struct cgpu_info *usb_free_cgpu(struct cgpu_info *cgpu)
+{
+	if (cgpu->drv->copy)
+		free(cgpu->drv);
+
+	free(cgpu->device_path);
+
+	free(cgpu);
+
+	return NULL;
+}
+
+
+#if 0
 
 #define NODEV(err) ((err) != LIBUSB_SUCCESS && (err) != LIBUSB_ERROR_TIMEOUT)
 
@@ -174,11 +206,6 @@ static const char *nodatareturned = "no data returned ";
  #define USBDEBUG(fmt, ...)
 #endif
 
-// For device limits by driver
-static struct driver_count {
-	int count;
-	int limit;
-} drv_count[DRIVER_MAX];
 
 // For device limits by list of bus/dev
 static struct usb_busdev {
@@ -194,9 +221,6 @@ static struct usb_busdev {
 
 static int busdev_count = 0;
 
-// Total device limit
-static int total_count = 0;
-static int total_limit = 999999;
 
 struct usb_in_use_list {
 	struct usb_busdev in_use;
@@ -1212,17 +1236,6 @@ struct cgpu_info *usb_alloc_cgpu(struct device_drv *drv, int threads)
 	return cgpu;
 }
 
-struct cgpu_info *usb_free_cgpu(struct cgpu_info *cgpu)
-{
-	if (cgpu->drv->copy)
-		free(cgpu->drv);
-
-	free(cgpu->device_path);
-
-	free(cgpu);
-
-	return NULL;
-}
 
 #define USB_INIT_FAIL 0
 #define USB_INIT_OK 1
@@ -2765,11 +2778,6 @@ void usb_initialise(void)
 	}
 }
 
-#include <errno.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/file.h>
-#include <fcntl.h>
 
 
 union semun {
@@ -2902,9 +2910,17 @@ void initialise_usblocks(void)
 	mutex_init(&cgusbres_lock);
 	cglock_init(&cgusb_fd_lock);
 }
-
+#endif
 
 // bitmain stuff. Simplify ?
+
+void usb_initialise(void)
+{
+	for (int i = 0; i < DRIVER_MAX; i++) {
+		drv_count[i].count = 0;
+		drv_count[i].limit = 999999;
+	}
+}
 
 struct cgpu_info *btm_alloc_cgpu(struct device_drv *drv, int threads)
 {

@@ -15,7 +15,6 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <string.h>
-#include <jansson.h>
 
 #include <time.h>
 #include <errno.h>
@@ -83,92 +82,11 @@ unsigned char bit_swap_table[256] =
   0x1f, 0x9f, 0x5f, 0xdf, 0x3f, 0xbf, 0x7f, 0xff,
 };
 
-static void keep_sockalive(SOCKETTYPE fd)
-{
-	const int tcp_one = 1;
-	const int tcp_keepidle = 45;
-	const int tcp_keepintvl = 30;
-	int flags = fcntl(fd, F_GETFL, 0);
-
-	fcntl(fd, F_SETFL, O_NONBLOCK | flags);
-
-	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (const void *)&tcp_one, sizeof(tcp_one));
-	if (1)
-/* __linux */
-	fcntl(fd, F_SETFD, FD_CLOEXEC);
-	setsockopt(fd, SOL_TCP, TCP_NODELAY, (const void *)&tcp_one, sizeof(tcp_one));
-	setsockopt(fd, SOL_TCP, TCP_KEEPCNT, &tcp_one, sizeof(tcp_one));
-	setsockopt(fd, SOL_TCP, TCP_KEEPIDLE, &tcp_keepidle, sizeof(tcp_keepidle));
-	setsockopt(fd, SOL_TCP, TCP_KEEPINTVL, &tcp_keepintvl, sizeof(tcp_keepintvl));
-}
-
 
 struct tq_ent {
 	void			*data;
 	struct list_head	q_node;
 };
-
-#define PROXY_HTTP	0
-#define PROXY_HTTP_1_0	1
-#define PROXY_SOCKS4	2
-#define PROXY_SOCKS5	3
-#define PROXY_SOCKS4A	4
-#define PROXY_SOCKS5H	5
-
-
-static struct {
-	const char *name;
-	proxytypes_t proxytype;
-} proxynames[] = {
-	{ "http:",	PROXY_HTTP },
-	{ "http0:",	PROXY_HTTP_1_0 },
-	{ "socks4:",	PROXY_SOCKS4 },
-	{ "socks5:",	PROXY_SOCKS5 },
-	{ "socks4a:",	PROXY_SOCKS4A },
-	{ "socks5h:",	PROXY_SOCKS5H },
-	{ NULL,	0 }
-};
-
-const char *proxytype(proxytypes_t proxytype)
-{
-	int i;
-
-	for (i = 0; proxynames[i].name; i++)
-		if (proxynames[i].proxytype == proxytype)
-			return proxynames[i].name;
-
-	return "invalid";
-}
-
-char *get_proxy(char *url, struct pool *pool)
-{
-	pool->rpc_proxy = NULL;
-
-	char *split;
-	int plen, len, i;
-
-	for (i = 0; proxynames[i].name; i++) {
-		plen = strlen(proxynames[i].name);
-		if (strncmp(url, proxynames[i].name, plen) == 0) {
-			if (!(split = strchr(url, '|')))
-				return url;
-
-			*split = '\0';
-			len = split - url;
-			pool->rpc_proxy = malloc(1 + len - plen);
-			if (!(pool->rpc_proxy))
-				quithere(1, "Failed to malloc rpc_proxy");
-
-			strcpy(pool->rpc_proxy, url + plen);
-			extract_sockaddr(pool->rpc_proxy, &pool->sockaddr_proxy_url, &pool->sockaddr_proxy_port);
-			pool->rpc_proxytype = proxynames[i].proxytype;
-			url = split + 1;
-			break;
-		}
-	}
-	return url;
-}
-
 /* Adequate size s==len*2 + 1 must be alloced to use this variant */
 void __bin2hex(char *s, const unsigned char *p, size_t len)
 {
@@ -315,65 +233,6 @@ static const int b58tobin_tbl[] = {
 	-1, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, -1, 44, 45, 46,
 	47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57
 };
-
-/* b58bin should always be at least 25 bytes long and already checked to be
- * valid. */
-void b58tobin(unsigned char *b58bin, const char *b58)
-{
-	uint32_t c, bin32[7];
-	int len, i, j;
-	uint64_t t;
-
-	memset(bin32, 0, 7 * sizeof(uint32_t));
-	len = strlen(b58);
-	for (i = 0; i < len; i++) {
-		c = b58[i];
-		c = b58tobin_tbl[c];
-		for (j = 6; j >= 0; j--) {
-			t = ((uint64_t)bin32[j]) * 58 + c;
-			c = (t & 0x3f00000000ull) >> 32;
-			bin32[j] = t & 0xffffffffull;
-		}
-	}
-	*(b58bin++) = bin32[0] & 0xff;
-	for (i = 1; i < 7; i++) {
-		*((uint32_t *)b58bin) = htobe32(bin32[i]);
-		b58bin += sizeof(uint32_t);
-	}
-}
-
-void address_to_pubkeyhash(unsigned char *pkh, const char *addr)
-{
-	unsigned char b58bin[25];
-
-	memset(b58bin, 0, 25);
-	b58tobin(b58bin, addr);
-	pkh[0] = 0x76;
-	pkh[1] = 0xa9;
-	pkh[2] = 0x14;
-	memcpy(&pkh[3], &b58bin[1], 20);
-	pkh[23] = 0x88;
-	pkh[24] = 0xac;
-}
-
-/*  For encoding nHeight into coinbase, return how many bytes were used */
-int ser_number(unsigned char *s, int32_t val)
-{
-	int32_t *i32 = (int32_t *)&s[1];
-	int len;
-
-	if (val < 128)
-		len = 1;
-	else if (val < 16512)
-		len = 2;
-	else if (val < 2113664)
-		len = 3;
-	else
-		len = 4;
-	*i32 = htole32(val);
-	s[0] = len++;
-	return len;
-}
 
 /* For encoding variable length strings */
 unsigned char *ser_string(char *s, int *slen)
@@ -856,136 +715,6 @@ double tdiff(struct timeval *end, struct timeval *start)
 	return end->tv_sec - start->tv_sec + (end->tv_usec - start->tv_usec) / 1000000.0;
 }
 
-void check_extranonce_option(struct pool *pool, char * url)
-{
-	char extra_op[16],*extra_op_loc;
-	extra_op_loc = strstr(url,"#");
-    if(extra_op_loc && !pool->extranonce_subscribe)
-    {
-        strcpy(extra_op, extra_op_loc);
-        *extra_op_loc = '\0';
-		if(!strcmp(extra_op,"#xnsub"))
-		{
-			pool->extranonce_subscribe = true;
-			applog(LOG_DEBUG, "Pool %d extranonce subscribing enabled.",pool->pool_no);
-			return;
-		}
-    }
-	return;
-}
-
-bool extract_sockaddr(char *url, char **sockaddr_url, char **sockaddr_port)
-{
-	char *url_begin, *url_end, *ipv6_begin, *ipv6_end, *port_start = NULL;
-	char url_address[256], port[6];
-	int url_len, port_len = 0;
-
-	*sockaddr_url = url;
-	url_begin = strstr(url, "//");
-	if (!url_begin)
-		url_begin = url;
-	else
-		url_begin += 2;
-
-	/* Look for numeric ipv6 entries */
-	ipv6_begin = strstr(url_begin, "[");
-	ipv6_end = strstr(url_begin, "]");
-	if (ipv6_begin && ipv6_end && ipv6_end > ipv6_begin)
-		url_end = strstr(ipv6_end, ":");
-	else
-		url_end = strstr(url_begin, ":");
-	if (url_end) {
-		url_len = url_end - url_begin;
-		port_len = strlen(url_begin) - url_len - 1;
-		if (port_len < 1)
-			return false;
-		port_start = url_end + 1;
-	} else
-		url_len = strlen(url_begin);
-
-	if (url_len < 1)
-		return false;
-
-	/* Get rid of the [] */
-	if (ipv6_begin && ipv6_end && ipv6_end > ipv6_begin) {
-		url_len -= 2;
-		url_begin++;
-	}
-	
-	snprintf(url_address, 254, "%.*s", url_len, url_begin);
-
-	if (port_len) {
-		char *slash;
-
-		snprintf(port, 6, "%.*s", port_len, port_start);
-		slash = strchr(port, '/');
-		if (slash)
-			*slash = '\0';
-	} else
-		strcpy(port, "80");
-
-	*sockaddr_port = strdup(port);
-	*sockaddr_url = strdup(url_address);
-
-	return true;
-}
-
-enum send_ret {
-	SEND_OK,
-	SEND_SELECTFAIL,
-	SEND_SENDFAIL,
-	SEND_INACTIVE
-};
-
-
-
-static bool socket_full(struct pool *pool, int wait)
-{
-	SOCKETTYPE sock = pool->sock;
-	struct timeval timeout;
-	fd_set rd;
-
-	if (unlikely(wait < 0))
-		wait = 0;
-	FD_ZERO(&rd);
-	FD_SET(sock, &rd);
-	timeout.tv_usec = 0;
-	timeout.tv_sec = wait;
-	if (select(sock + 1, &rd, NULL, NULL, &timeout) > 0)
-		return true;
-	return false;
-}
-
-/* Check to see if Santa's been good to you */
-bool sock_full(struct pool *pool)
-{
-	if (strlen(pool->sockbuf))
-		return true;
-
-	return (socket_full(pool, 0));
-}
-
-static void clear_sockbuf(struct pool *pool)
-{
-	if (likely(pool->sockbuf))
-		strcpy(pool->sockbuf, "");
-}
-
-static void clear_sock(struct pool *pool)
-{
-	ssize_t n;
-
-	mutex_lock(&pool->stratum_lock);
-	do {
-		if (pool->sock)
-			n = recv(pool->sock, pool->sockbuf, RECVSIZE, 0);
-		else
-			n = 0;
-	} while (n > 0);
-	mutex_unlock(&pool->stratum_lock);
-
-	clear_sockbuf(pool);
-}
 
 /* Realloc memory to new size and zero any extra memory added */
 void _recalloc(void **ptr, size_t old, size_t new, const char *file, const char *func, const int line)
@@ -998,53 +727,6 @@ void _recalloc(void **ptr, size_t old, size_t new, const char *file, const char 
 	if (new > old)
 		memset(*ptr + old, 0, new - old);
 }
-
-static int recv_byte(int sockd)
-{
-	char c;
-
-	if (recv(sockd, &c, 1, 0) != -1)
-		return c;
-
-	return -1;
-}
-
-
-static void noblock_socket(SOCKETTYPE fd)
-{
-#ifndef WIN32
-	int flags = fcntl(fd, F_GETFL, 0);
-
-	fcntl(fd, F_SETFL, O_NONBLOCK | flags);
-#else
-	u_long flags = 1;
-
-	ioctlsocket(fd, FIONBIO, &flags);
-#endif
-}
-
-static void block_socket(SOCKETTYPE fd)
-{
-#ifndef WIN32
-	int flags = fcntl(fd, F_GETFL, 0);
-
-	fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
-#else
-	u_long flags = 0;
-
-	ioctlsocket(fd, FIONBIO, &flags);
-#endif
-}
-
-static bool sock_connecting(void)
-{
-#ifndef WIN32
-	return errno == EINPROGRESS;
-#else
-	return WSAGetLastError() == WSAEWOULDBLOCK;
-#endif
-}
-
 
 
 void dev_error(struct cgpu_info *dev, enum dev_reason reason)

@@ -441,12 +441,7 @@ else
 fi
 
 
-#Add a new device to this list if it needs libusb, along with a no on the end.
-if test x$avalon$avalon2$bitforce$bitfury$blockerupter$modminer$bflsc$icarus$hashfast$hashratio$klondike$drillbit$cointerra$bmsc$bitmain != xnonononononononononononononono; then
-	want_usbutils=true
-else
-	want_usbutils=false
-fi
+want_usbutils=false
 
 if test x$bitfury != xno; then
 	want_libbitfury=true
@@ -468,51 +463,8 @@ AM_CONDITIONAL([HAVE_WINDOWS], [test x$have_win32 = xtrue])
 AM_CONDITIONAL([HAVE_x86_64], [test x$have_x86_64 = xtrue])
 AM_CONDITIONAL([WANT_CRC16], [test x$want_crc16 != xfalse])
 
-if test "x$want_usbutils" != xfalse; then
-	dlibusb="no"
-	AC_DEFINE([USE_USBUTILS], [1], [Defined to 1 if usbutils support required])
-	AC_ARG_WITH([system-libusb],
-		[AC_HELP_STRING([--with-system-libusb],[NOT RECOMMENDED! Compile against dynamic system libusb. (Default use included static libusb)])],
-		[dlibusb=$withval]
-	)
-
-	if test "x$dlibusb" != xno; then
-		case $target in
-			*-*-freebsd*)
-				LIBUSB_LIBS="-lusb"
-				LIBUSB_CFLAGS=""
-				AC_DEFINE(HAVE_LIBUSB, 1, [Define if you have libusb-1.0])
-				;;
-			*)
-				PKG_CHECK_MODULES(LIBUSB, libusb-1.0, [AC_DEFINE(HAVE_LIBUSB, 1, [Define if you have libusb-1.0])], [AC_MSG_ERROR([Could not find usb library - please install libusb-1.0])])
-				;;
-		esac
-	else
-		AC_CONFIG_SUBDIRS([compat/libusb-1.0])
-		LIBUSB_LIBS="compat/libusb-1.0/libusb/.libs/libusb-1.0.a"
-		if test "x$have_linux" = "xtrue"; then
-			AC_ARG_ENABLE([udev],
-				[AC_HELP_STRING([--disable-udev],[Disable building libusb with udev])],
-				[udev=$enableval]
-				)
-
-			if test "x$udev" != xno; then
-			LIBUSB_LIBS+=" -ludev"
-		fi
-		fi
-		if test "x$have_darwin" = "xtrue"; then
-			LIBUSB_LIBS+=" -lobjc"
-			LDFLAGS+=" -framework CoreFoundation -framework IOKit"
-		fi
-	fi
-else
-	LIBUSB_LIBS=""
-fi
-
 AM_CONDITIONAL([WANT_STATIC_LIBUSB], [test x$dlibusb = xno])
 
-AC_CONFIG_SUBDIRS([compat/jansson-2.6])
-JANSSON_LIBS="compat/jansson-2.6/src/.libs/libjansson.a"
 
 PKG_PROG_PKG_CONFIG()
 
@@ -608,7 +560,6 @@ AC_SUBST(RT_LIBS)
 
 AC_CONFIG_FILES([
 	Makefile
-	compat/Makefile
 	ccan/Makefile
 	lib/Makefile
 	])

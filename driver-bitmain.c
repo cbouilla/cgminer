@@ -34,66 +34,15 @@
 
 #define BITMAIN_CALC_DIFF1	1
 
-#ifdef WIN32
-#define BITMAIN_TEST
-#endif
 
 #define BITMAIN_TEST_PRINT_WORK 0
-#ifdef BITMAIN_TEST
-#define BITMAIN_TEST_NUM 19
-#define BITMAIN_TEST_USENUM 1
-int g_test_index = 0;
-const char btm_work_test_data[BITMAIN_TEST_NUM][256] = {
-	"00000002ddc1ce5579dbec17f17fbb8f31ae218a814b2a0c1900f0d90000000100000000b58aa6ca86546b07a5a46698f736c7ca9c0eedc756d8f28ac33c20cc24d792675276f879190afc85b6888022000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b190000000000000000eb2d45233c5b02de50ddcb9049ba16040e0ba00e9750a474eec75891571d925b52dfda4a190266667145b02f000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b19000000000000000090c7d3743e0b0562e4f56d3dd35cece3c5e8275d0abb21bf7e503cb72bd7ed3b52dfda4a190266667bbb58d7000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b1900000000000000006e0561da06022bfbb42c5ecd74a46bfd91934f201b777e9155cc6c3674724ec652dfda4a19026666a0cd827b000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b1900000000000000000312f42ce4964cc23f2d8c039f106f25ddd58e10a1faed21b3bba4b0e621807b52dfda4a1902666629c9497d000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b19000000000000000033093a6540dbe8f7f3d19e3d2af05585ac58dafad890fa9a942e977334a23d6e52dfda4a190266665ae95079000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b190000000000000000bd7893057d06e69705bddf9a89c7bac6b40c5b32f15e2295fc8c5edf491ea24952dfda4a190266664b89b4d3000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b19000000000000000075e66f533e53837d14236a793ee4e493985642bc39e016b9e63adf14a584a2aa52dfda4a19026666ab5d638d000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b190000000000000000d936f90c5db5f0fe1d017344443854fbf9e40a07a9b7e74fedc8661c23162bff52dfda4a19026666338e79cb000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b190000000000000000d2c1a7d279a4355b017bc0a4b0a9425707786729f21ee18add3fda4252a31a4152dfda4a190266669bc90806000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b190000000000000000ad36d19f33d04ca779942843890bc3b083cec83a4b60b6c45cf7d21fc187746552dfda4a1902666675d81ab7000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b19000000000000000093b809cf82b76082eacb55bc35b79f31882ed0976fd102ef54783cd24341319b52dfda4a1902666642ab4e42000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b1900000000000000007411ff315430a7bbf41de8a685d457e82d5177c05640d6a4436a40f39e99667852dfda4a190266662affa4b5000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b1900000000000000001ad0db5b9e1e2b57c8d3654c160f5a51067521eab7e340a270639d97f00a3fa252dfda4a1902666601a47bb6000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b19000000000000000022e055c442c46bbe16df68603a26891f6e4cf85b90102b39fd7cadb602b4e34552dfda4a1902666695d33cea000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b1900000000000000009c8baf5a8a1e16de2d6ae949d5fec3ed751f10dcd4c99810f2ce08040fb9e31d52dfda4a19026666fe78849d000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b190000000000000000e5655532b414887f35eb4652bc7b11ebac12891f65bc08cbe0ce5b277b9e795152dfda4a19026666fcc0d1d1000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b190000000000000000f272c5508704e2b62dd1c30ea970372c40bf00f9203f9bf69d456b4a7fbfffe352dfda4a19026666c03d4399000000800000000000000000000000000000000000000000000000000000000000000000",
-	"0000000256ccc4c8aeae2b1e41490bc352893605f284e4be043f7b190000000000000000fca3b4531ba627ad9b0e23cdd84c888952c23810df196e9c6db0bcecba6a830952dfda4a19026666c14009cb000000800000000000000000000000000000000000000000000000000000000000000000"
-};
-
-const char btm_work_test_midstate[BITMAIN_TEST_NUM][256] = {
-	"2d8738e7f5bcf76dcb8316fec772e20e240cd58c88d47f2d3f5a6a9547ed0a35",
-	"d31b6ce09c0bfc2af6f3fe3a03475ebefa5aa191fa70a327a354b2c22f9692f1",
-	"84a8c8224b80d36caeb42eff2a100f634e1ff873e83fd02ef1306a34abef9dbe",
-	"059882159439b9b32968c79a93c5521e769dbea9d840f56c2a17b9ad87e530b8",
-	"17fa435d05012574f8f1da26994cc87b6cb9660b5e82072dc6a0881cec150a0d",
-	"92a28cc5ec4ba6a2688471dfe2032b5fe97c805ca286c503e447d6749796c6af",
-	"1677a03516d6e9509ac37e273d2482da9af6e077abe8392cdca6a30e916a7ae9",
-	"50bbe09f1b8ac18c97aeb745d5d2c3b5d669b6ac7803e646f65ac7b763a392d1",
-	"e46a0022ebdc303a7fb1a0ebfa82b523946c312e745e5b8a116b17ae6b4ce981",
-	"8f2f61e7f5b4d76d854e6d266acfff4d40347548216838ccc4ef3b9e43d3c9ea",
-	"0a450588ae99f75d676a08d0326e1ea874a3497f696722c78a80c7b6ee961ea6",
-	"3c4c0fc2cf040b806c51b46de9ec0dcc678a7cc5cf3eff11c6c03de3bc7818cc",
-	"f6c7c785ab5daddb8f98e5f854f2cb41879fcaf47289eb2b4196fefc1b28316f",
-	"005312351ccb0d0794779f5023e4335b5cad221accf0dfa3da7b881266fa9f5a",
-	"7b26d189c6bba7add54143179aadbba7ccaeff6887bd8d5bec9597d5716126e6",
-	"a4718f4c801e7ddf913a9474eb71774993525684ffea1915f767ab16e05e6889",
-	"6b6226a8c18919d0e55684638d33a6892a00d22492cc2f5906ca7a4ac21c74a7",
-	"383114dccd1cb824b869158aa2984d157fcb02f46234ceca65943e919329e697",
-	"d4d478df3016852b27cb1ae9e1e98d98617f8d0943bf9dc1217f47f817236222"
-};
-#endif
 
 char opt_bitmain_dev[256] = { 0 };
 
 bool opt_bitmain_hwerror = false;
 bool opt_bitmain_checkall = false;
 bool opt_bitmain_checkn2diff = false;
-bool opt_bitmain_dev_usb = true;
+static const bool opt_bitmain_dev_usb = false;
 bool opt_bitmain_nobeeper = false;
 bool opt_bitmain_notempoverctrl = false;
 bool opt_bitmain_homemode = false;
@@ -609,19 +558,7 @@ static int bitmain_set_txtask(uint8_t * sendbuf, unsigned int *last_work_block, 
 				new_block = 1;
 				*last_work_block = works[index]->work_block;
 			}
-#ifdef BITMAIN_TEST
-			if (!hex2bin(works[index]->data, btm_work_test_data[g_test_index], 128)) {
-				applog(LOG_DEBUG, "BTM send task set test data error");
-			}
-			if (!hex2bin(works[index]->midstate, btm_work_test_midstate[g_test_index], 32)) {
-				applog(LOG_DEBUG, "BTM send task set test midstate error");
-			}
-			g_test_index++;
-			if (g_test_index >= BITMAIN_TEST_USENUM) {
-				g_test_index = 0;
-			}
-			applog(LOG_DEBUG, "BTM test index = %d", g_test_index);
-#endif
+
 			work_id = works[index]->id;
 			bm->works[cursendcount].work_id = htole32(work_id);
 			applog(LOG_DEBUG, "BTM send task work id:%d %d", bm->works[cursendcount].work_id, work_id);
@@ -911,46 +848,46 @@ static int bitmain_read(struct cgpu_info *bitmain, unsigned char *buf, size_t bu
 		applog(LOG_WARNING, "bitmain_read parameter error bufsize(%d)", bufsize);
 		return -1;
 	}
-	if (opt_bitmain_dev_usb) {
-		err = usb_read_once_timeout(bitmain, buf, bufsize, &readlen, timeout, ep);
-		applog(LOG_DEBUG, "%s%i: Get bitmain read got readlen %d err %d", bitmain->drv->name, bitmain->device_id, readlen, err);
-		total = readlen;
-	} else {
-		err = btm_read(bitmain, buf, bufsize);
-		total = err;
-	}
- out:
+	// if (opt_bitmain_dev_usb) {
+	//	err = usb_read_once_timeout(bitmain, buf, bufsize, &readlen, timeout, ep);
+	//	applog(LOG_DEBUG, "%s%i: Get bitmain read got readlen %d err %d", bitmain->drv->name, bitmain->device_id, readlen, err);
+	//	total = readlen;
+	// } else { 
+	err = btm_read(bitmain, buf, bufsize);
+	total = err;
+	// }
+ //out:
 	return total;
 }
 
 static int bitmain_write(struct cgpu_info *bitmain, char *buf, ssize_t len, int ep)
 {
 	int err, amount;
-	if (opt_bitmain_dev_usb) {
-		err = usb_write(bitmain, buf, len, &amount, ep);
-		applog(LOG_DEBUG, "%s%i: usb_write got err %d", bitmain->drv->name, bitmain->device_id, err);
+	// if (opt_bitmain_dev_usb) {
+	// 	err = usb_write(bitmain, buf, len, &amount, ep);
+	// 	applog(LOG_DEBUG, "%s%i: usb_write got err %d", bitmain->drv->name, bitmain->device_id, err);
 
-		if (unlikely(err != 0)) {
-			applog(LOG_ERR, "usb_write error on bitmain_write err=%d", err);
+	// 	if (unlikely(err != 0)) {
+	// 		applog(LOG_ERR, "usb_write error on bitmain_write err=%d", err);
+	// 		return BTM_SEND_ERROR;
+	// 	}
+	// 	if (amount != len) {
+	// 		applog(LOG_ERR, "usb_write length mismatch on bitmain_write amount=%d len=%d", amount, len);
+	// 		return BTM_SEND_ERROR;
+	// 	}
+	// } else {
+	int havelen = 0;
+	while (havelen < len) {
+		err = btm_write(bitmain, buf + havelen, len - havelen);
+		if (err < 0) {
+			applog(LOG_DEBUG, "%s%i: btm_write got err %d", bitmain->drv->name, bitmain->device_id, err);
+			applog(LOG_WARNING, "usb_write error on bitmain_write");
 			return BTM_SEND_ERROR;
-		}
-		if (amount != len) {
-			applog(LOG_ERR, "usb_write length mismatch on bitmain_write amount=%d len=%d", amount, len);
-			return BTM_SEND_ERROR;
-		}
-	} else {
-		int havelen = 0;
-		while (havelen < len) {
-			err = btm_write(bitmain, buf + havelen, len - havelen);
-			if (err < 0) {
-				applog(LOG_DEBUG, "%s%i: btm_write got err %d", bitmain->drv->name, bitmain->device_id, err);
-				applog(LOG_WARNING, "usb_write error on bitmain_write");
-				return BTM_SEND_ERROR;
-			} else {
-				havelen += err;
-			}
+		} else {
+			havelen += err;
 		}
 	}
+//	}
 	return BTM_SEND_OK;
 }
 
@@ -1246,18 +1183,6 @@ static void bitmain_parse_results(struct cgpu_info *bitmain, struct bitmain_info
 					work = clone_queued_work_byid(bitmain, rxnoncedata.nonces[j].work_id);
 					if (work) {
 						pool = work->pool;
-						if (BITMAIN_TEST_PRINT_WORK) {
-							applog(LOG_ERR, "bitmain_parse_results nonce find work(%d-%d)(%08x)", work->id, rxnoncedata.nonces[j].work_id, rxnoncedata.nonces[j].nonce);
-
-							ob_hex = bin2hex(work->midstate, 32);
-							applog(LOG_ERR, "work %d midstate: %s", work->id, ob_hex);
-							free(ob_hex);
-
-							ob_hex = bin2hex(work->data + 64, 12);
-							applog(LOG_ERR, "work %d data2: %s", work->id, ob_hex);
-							free(ob_hex);
-						}
-
 						if (work->work_block < info->last_work_block) {
 							applog(LOG_ERR, "BitMain: bitmain_parse_rxnonce work(%d) nonce stale", rxnoncedata.nonces[j].work_id);
 						} else {
@@ -1266,8 +1191,7 @@ static void bitmain_parse_results(struct cgpu_info *bitmain, struct bitmain_info
 								if (opt_bitmain_hwerror) {
 #ifndef BITMAIN_CALC_DIFF1
 									mutex_lock(&info->qlock);
-									idiff = (int)
-									    work->sdiff;
+									idiff = (int) work->sdiff;
 									info->nonces += idiff;
 									info->auto_nonces += idiff;
 									mutex_unlock(&info->qlock);
@@ -1699,113 +1623,6 @@ static void bitmain_usb_init(struct cgpu_info *bitmain)
 
 }
 
-// TODO : à virer
-static struct cgpu_info *bitmain_usb_detect_one(libusb_device * dev, struct usb_find_devices *found)
-{
-	int baud, chain_num, asic_num, timeout, frequency = 0;
-	char frequency_t[256] = { 0 };
-	uint8_t reg_data[4] = { 0 };
-	uint8_t voltage[2] = { 0 };
-	char voltage_t[8] = { 0 };
-	int this_option_offset = ++option_offset;
-	struct bitmain_info *info;
-	struct cgpu_info *bitmain;
-	bool configured;
-	int ret;
-
-	if (opt_bitmain_options == NULL)
-		return NULL;
-
-	bitmain = usb_alloc_cgpu(&bitmain_drv, BITMAIN_MINER_THREADS);
-
-	baud = BITMAIN_IO_SPEED;
-	chain_num = BITMAIN_DEFAULT_CHAIN_NUM;
-	asic_num = BITMAIN_DEFAULT_ASIC_NUM;
-	timeout = BITMAIN_DEFAULT_TIMEOUT;
-	frequency = BITMAIN_DEFAULT_FREQUENCY;
-
-	if (!usb_init(bitmain, dev, found))
-		goto shin;
-
-	configured = get_options(this_option_offset, &baud, &chain_num, &asic_num, &timeout, &frequency, frequency_t, reg_data, voltage, voltage_t);
-	get_option_freq(&timeout, &frequency, frequency_t, reg_data);
-	get_option_voltage(voltage, voltage_t);
-
-	/* Even though this is an FTDI type chip, we want to do the parsing
-	 * all ourselves so set it to std usb type */
-	bitmain->usbdev->usb_type = USB_TYPE_STD;
-
-	/* We have a real BitMain! */
-	bitmain_usb_init(bitmain);
-
-	bitmain->device_data = calloc(sizeof(struct bitmain_info), 1);
-	if (unlikely(!(bitmain->device_data)))
-		quit(1, "Failed to calloc bitmain_info data");
-	info = bitmain->device_data;
-
-	if (configured) {
-		info->baud = baud;
-		info->chain_num = chain_num;
-		info->asic_num = asic_num;
-		info->timeout = timeout;
-		info->frequency = frequency;
-		strcpy(info->frequency_t, frequency_t);
-		memcpy(info->reg_data, reg_data, 4);
-		memcpy(info->voltage, voltage, 2);
-		strcpy(info->voltage_t, voltage_t);
-	} else {
-		info->baud = BITMAIN_IO_SPEED;
-		info->chain_num = BITMAIN_DEFAULT_CHAIN_NUM;
-		info->asic_num = BITMAIN_DEFAULT_ASIC_NUM;
-		info->timeout = BITMAIN_DEFAULT_TIMEOUT;
-		info->frequency = BITMAIN_DEFAULT_FREQUENCY;
-		sprintf(info->frequency_t, "%d", BITMAIN_DEFAULT_FREQUENCY);
-		memset(info->reg_data, 0, 4);
-		info->voltage[0] = BITMAIN_DEFAULT_VOLTAGE0;
-		info->voltage[1] = BITMAIN_DEFAULT_VOLTAGE1;
-		strcpy(info->voltage_t, BITMAIN_DEFAULT_VOLTAGE_T);
-	}
-
-	info->fan_pwm = BITMAIN_DEFAULT_FAN_MIN_PWM;
-	info->temp_max = 0;
-	/* This is for check the temp/fan every 3~4s */
-	info->temp_history_count = (4 / (float)((float)info->timeout * ((float)1.67 / 0x32))) + 1;
-	if (info->temp_history_count <= 0)
-		info->temp_history_count = 1;
-
-	info->temp_history_index = 0;
-	info->temp_sum = 0;
-	info->temp_old = 0;
-
-	if (!add_cgpu(bitmain))
-		goto unshin;
-
-	applog(LOG_ERR, "------bitmain usb detect one------");
-	ret = bitmain_initialize(bitmain);
-	if (ret && !configured)
-		goto unshin;
-
-	update_usb_stats(bitmain);
-
-	info->errorcount = 0;
-
-	applog(LOG_DEBUG, "BitMain Detected: %s " "(chain_num=%d asic_num=%d timeout=%d frequency=%d)", bitmain->device_path, info->chain_num, info->asic_num, info->timeout, info->frequency);
-
-	return bitmain;
-
- unshin:
-
-	usb_uninit(bitmain);
-
- shin:
-
-	free(bitmain->device_data);
-	bitmain->device_data = NULL;
-
-	bitmain = usb_free_cgpu(bitmain);
-
-	return NULL;
-}
 
 static bool bitmain_detect_one(const char *devpath)
 {
@@ -1903,16 +1720,7 @@ static bool bitmain_detect_one(const char *devpath)
 static void bitmain_detect(bool __maybe_unused hotplug)
 {
 	applog(LOG_DEBUG, "BTM detect dev: %s", opt_bitmain_dev);
-	if (strlen(opt_bitmain_dev) <= 0) {
-		opt_bitmain_dev_usb = true;
-	} else {
-		opt_bitmain_dev_usb = false;
-	}
-	if (opt_bitmain_dev_usb) {
-		usb_detect(&bitmain_drv, bitmain_usb_detect_one);
-	} else {
-		btm_detect(&bitmain_drv, bitmain_detect_one);
-	}
+	btm_detect(&bitmain_drv, bitmain_detect_one);
 }
 
 static void do_bitmain_close(struct thr_info *thr)
@@ -2178,113 +1986,6 @@ static void bitmain_flush_work(struct cgpu_info *bitmain)
 
 static struct api_data *bitmain_api_stats(struct cgpu_info *cgpu)
 {
-#if 0
-	struct api_data *root = NULL;
-	struct bitmain_info *info = cgpu->device_data;
-	char buf[64];
-	int i = 0;
-	double hwp = (cgpu->hw_errors + cgpu->diff1) ? (double)(cgpu->hw_errors) / (double)(cgpu->hw_errors + cgpu->diff1) : 0;
-
-	root = api_add_int(root, "baud", &(info->baud), false);
-	root = api_add_int(root, "miner_count", &(info->chain_num), false);
-	root = api_add_int(root, "asic_count", &(info->asic_num), false);
-	root = api_add_int(root, "timeout", &(info->timeout), false);
-	root = api_add_string(root, "frequency", info->frequency_t, false);
-	root = api_add_string(root, "voltage", info->voltage_t, false);
-	root = api_add_int(root, "hwv1", &(info->hw_version[0]), false);
-	root = api_add_int(root, "hwv2", &(info->hw_version[1]), false);
-	root = api_add_int(root, "hwv3", &(info->hw_version[2]), false);
-	root = api_add_int(root, "hwv4", &(info->hw_version[3]), false);
-
-	root = api_add_int(root, "fan_num", &(info->fan_num), false);
-	root = api_add_int(root, "fan1", &(info->fan[0]), false);
-	root = api_add_int(root, "fan2", &(info->fan[1]), false);
-	root = api_add_int(root, "fan3", &(info->fan[2]), false);
-	root = api_add_int(root, "fan4", &(info->fan[3]), false);
-	root = api_add_int(root, "fan5", &(info->fan[4]), false);
-	root = api_add_int(root, "fan6", &(info->fan[5]), false);
-	root = api_add_int(root, "fan7", &(info->fan[6]), false);
-	root = api_add_int(root, "fan8", &(info->fan[7]), false);
-	root = api_add_int(root, "fan9", &(info->fan[8]), false);
-	root = api_add_int(root, "fan10", &(info->fan[9]), false);
-	root = api_add_int(root, "fan11", &(info->fan[10]), false);
-	root = api_add_int(root, "fan12", &(info->fan[11]), false);
-	root = api_add_int(root, "fan13", &(info->fan[12]), false);
-	root = api_add_int(root, "fan14", &(info->fan[13]), false);
-	root = api_add_int(root, "fan15", &(info->fan[14]), false);
-	root = api_add_int(root, "fan16", &(info->fan[15]), false);
-
-	root = api_add_int(root, "temp_num", &(info->temp_num), false);
-	root = api_add_int(root, "temp1", &(info->temp[0]), false);
-	root = api_add_int(root, "temp2", &(info->temp[1]), false);
-	root = api_add_int(root, "temp3", &(info->temp[2]), false);
-	root = api_add_int(root, "temp4", &(info->temp[3]), false);
-	root = api_add_int(root, "temp5", &(info->temp[4]), false);
-	root = api_add_int(root, "temp6", &(info->temp[5]), false);
-	root = api_add_int(root, "temp7", &(info->temp[6]), false);
-	root = api_add_int(root, "temp8", &(info->temp[7]), false);
-	root = api_add_int(root, "temp9", &(info->temp[8]), false);
-	root = api_add_int(root, "temp10", &(info->temp[9]), false);
-	root = api_add_int(root, "temp11", &(info->temp[10]), false);
-	root = api_add_int(root, "temp12", &(info->temp[11]), false);
-	root = api_add_int(root, "temp13", &(info->temp[12]), false);
-	root = api_add_int(root, "temp14", &(info->temp[13]), false);
-	root = api_add_int(root, "temp15", &(info->temp[14]), false);
-	root = api_add_int(root, "temp16", &(info->temp[15]), false);
-	root = api_add_int(root, "temp_avg", &(info->temp_avg), false);
-	root = api_add_int(root, "temp_max", &(info->temp_max), false);
-	root = api_add_percent(root, "Device Hardware%", &hwp, true);
-	root = api_add_int(root, "no_matching_work", &(info->no_matching_work), false);
-	/*
-	   for (i = 0; i < info->chain_num; i++) {
-	   char mcw[24];
-
-	   sprintf(mcw, "match_work_count%d", i + 1);
-	   root = api_add_int(root, mcw, &(info->matching_work[i]), false);
-	   } */
-
-	root = api_add_int(root, "chain_acn1", &(info->chain_asic_num[0]), false);
-	root = api_add_int(root, "chain_acn2", &(info->chain_asic_num[1]), false);
-	root = api_add_int(root, "chain_acn3", &(info->chain_asic_num[2]), false);
-	root = api_add_int(root, "chain_acn4", &(info->chain_asic_num[3]), false);
-	root = api_add_int(root, "chain_acn5", &(info->chain_asic_num[4]), false);
-	root = api_add_int(root, "chain_acn6", &(info->chain_asic_num[5]), false);
-	root = api_add_int(root, "chain_acn7", &(info->chain_asic_num[6]), false);
-	root = api_add_int(root, "chain_acn8", &(info->chain_asic_num[7]), false);
-	root = api_add_int(root, "chain_acn9", &(info->chain_asic_num[8]), false);
-	root = api_add_int(root, "chain_acn10", &(info->chain_asic_num[9]), false);
-	root = api_add_int(root, "chain_acn11", &(info->chain_asic_num[10]), false);
-	root = api_add_int(root, "chain_acn12", &(info->chain_asic_num[11]), false);
-	root = api_add_int(root, "chain_acn13", &(info->chain_asic_num[12]), false);
-	root = api_add_int(root, "chain_acn14", &(info->chain_asic_num[13]), false);
-	root = api_add_int(root, "chain_acn15", &(info->chain_asic_num[14]), false);
-	root = api_add_int(root, "chain_acn16", &(info->chain_asic_num[15]), false);
-
-	//applog(LOG_ERR, "chain asic status:%s", info->chain_asic_status_t[0]);
-	root = api_add_string(root, "chain_acs1", info->chain_asic_status_t[0], false);
-	root = api_add_string(root, "chain_acs2", info->chain_asic_status_t[1], false);
-	root = api_add_string(root, "chain_acs3", info->chain_asic_status_t[2], false);
-	root = api_add_string(root, "chain_acs4", info->chain_asic_status_t[3], false);
-	root = api_add_string(root, "chain_acs5", info->chain_asic_status_t[4], false);
-	root = api_add_string(root, "chain_acs6", info->chain_asic_status_t[5], false);
-	root = api_add_string(root, "chain_acs7", info->chain_asic_status_t[6], false);
-	root = api_add_string(root, "chain_acs8", info->chain_asic_status_t[7], false);
-	root = api_add_string(root, "chain_acs9", info->chain_asic_status_t[8], false);
-	root = api_add_string(root, "chain_acs10", info->chain_asic_status_t[9], false);
-	root = api_add_string(root, "chain_acs11", info->chain_asic_status_t[10], false);
-	root = api_add_string(root, "chain_acs12", info->chain_asic_status_t[11], false);
-	root = api_add_string(root, "chain_acs13", info->chain_asic_status_t[12], false);
-	root = api_add_string(root, "chain_acs14", info->chain_asic_status_t[13], false);
-	root = api_add_string(root, "chain_acs15", info->chain_asic_status_t[14], false);
-	root = api_add_string(root, "chain_acs16", info->chain_asic_status_t[15], false);
-
-	//root = api_add_int(root, "chain_acs1", &(info->chain_asic_status[0]), false);
-	//root = api_add_int(root, "chain_acs2", &(info->chain_asic_status[1]), false);
-	//root = api_add_int(root, "chain_acs3", &(info->chain_asic_status[2]), false);
-	//root = api_add_int(root, "chain_acs4", &(info->chain_asic_status[3]), false);
-
-	return root;
-#endif
 }
 
 static void bitmain_shutdown(struct thr_info *thr)
