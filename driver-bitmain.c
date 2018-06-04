@@ -841,8 +841,10 @@ static int bitmain_parse_rxnonce(const uint8_t * data, int datalen, struct bitma
 
 static int bitmain_read(struct cgpu_info *bitmain, unsigned char *buf, size_t bufsize, int timeout, int ep)
 {
-	int err = 0, readlen = 0;
+	int err = 0;
 	size_t total = 0;
+	(void) timeout;
+	(void) ep;
 
 	if (bitmain == NULL || buf == NULL || bufsize <= 0) {
 		applog(LOG_WARNING, "bitmain_read parameter error bufsize(%d)", bufsize);
@@ -862,7 +864,8 @@ static int bitmain_read(struct cgpu_info *bitmain, unsigned char *buf, size_t bu
 
 static int bitmain_write(struct cgpu_info *bitmain, char *buf, ssize_t len, int ep)
 {
-	int err, amount;
+	(void) ep;
+	int err;
 	// if (opt_bitmain_dev_usb) {
 	// 	err = usb_write(bitmain, buf, len, &amount, ep);
 	// 	applog(LOG_DEBUG, "%s%i: usb_write got err %d", bitmain->drv->name, bitmain->device_id, err);
@@ -893,9 +896,7 @@ static int bitmain_write(struct cgpu_info *bitmain, char *buf, ssize_t len, int 
 
 static int bitmain_send_data(const uint8_t * data, int datalen, struct cgpu_info *bitmain)
 {
-	int delay, ret, ep = C_BITMAIN_SEND;
-	struct bitmain_info *info = NULL;
-	cgtimer_t ts_start;
+	int ret, ep = C_BITMAIN_SEND;
 
 	if (datalen <= 0) {
 		return 0;
@@ -909,7 +910,6 @@ static int bitmain_send_data(const uint8_t * data, int datalen, struct cgpu_info
 		ep = C_BITMAIN_TOKEN_RXSTATUS;
 	}
 
-	info = bitmain->device_data;
 	//delay = datalen * 10 * 1000000;
 	//delay = delay / info->baud;
 	//delay += 4000;
@@ -1036,7 +1036,6 @@ static void bitmain_parse_results(struct cgpu_info *bitmain, struct bitmain_info
 	uint32_t checkbit = 0x00000000;
 	bool found = false;
 	struct work *work = NULL;
-	char *ob_hex = NULL;
 	struct bitmain_packet_head packethead;
 	int asicnum = 0;
 	int idiff = 0;
@@ -1268,7 +1267,7 @@ static void *bitmain_get_results(void *userdata)
 {
 	struct cgpu_info *bitmain = (struct cgpu_info *)userdata;
 	struct bitmain_info *info = bitmain->device_data;
-	int offset = 0, read_delay = 0, ret = 0;
+	int offset = 0, ret = 0;
 	const int rsize = BITMAIN_FTDI_READSIZE;
 	char readbuf[BITMAIN_READBUF_SIZE];
 	struct thr_info *thr = info->thr;
@@ -1375,7 +1374,7 @@ static int bitmain_initialize(struct cgpu_info *bitmain)
 {
 	uint8_t data[BITMAIN_READBUF_SIZE];
 	struct bitmain_info *info = NULL;
-	int ret = 0, spare = 0;
+	int ret = 0;
 	uint8_t sendbuf[BITMAIN_SENDBUF_SIZE];
 	int readlen = 0;
 	int sendlen = 0;
@@ -1590,6 +1589,7 @@ static int bitmain_initialize(struct cgpu_info *bitmain)
 
 static bool bitmain_detect_one(const char *devpath)
 {
+	(void) devpath;
 	int baud, chain_num, asic_num, timeout, frequency = 0;
 	char frequency_t[256] = { 0 };
 	uint8_t reg_data[4] = { 0 };
@@ -1727,7 +1727,6 @@ static bool bitmain_fill(struct cgpu_info *bitmain)
 	bool ret = true;
 	int sendret = 0, sendcount = 0, neednum = 0, queuednum = 0, sendnum = 0, sendlen = 0;
 	uint8_t sendbuf[BITMAIN_SENDBUF_SIZE];
-	cgtimer_t ts_start;
 	int senderror = 0;
 	struct timeval now;
 	int timediff = 0;
@@ -1884,8 +1883,6 @@ static int64_t bitmain_scanhash(struct thr_info *thr)
 	const int chain_num = info->chain_num;
 	struct timeval now, then, tdiff;
 	int64_t hash_count, us_timeout;
-	struct timespec abstime;
-	int ret;
 
 	/* Half nonce range */
 	us_timeout = 0x80000000ll / info->asic_num / info->frequency;
@@ -1893,8 +1890,6 @@ static int64_t bitmain_scanhash(struct thr_info *thr)
 	tdiff.tv_usec = us_timeout - (tdiff.tv_sec * 1000000);
 	cgtime(&now);
 	timeradd(&now, &tdiff, &then);
-	abstime.tv_sec = then.tv_sec;
-	abstime.tv_nsec = then.tv_usec * 1000;
 
 	//applog(LOG_DEBUG, "bitmain_scanhash info->qlock start");
 	mutex_lock(&info->qlock);
@@ -1928,7 +1923,6 @@ static int64_t bitmain_scanhash(struct thr_info *thr)
 static void bitmain_flush_work(struct cgpu_info *bitmain)
 {
 	struct bitmain_info *info = bitmain->device_data;
-	int i = 0;
 
 	mutex_lock(&info->qlock);
 	/* Will overwrite any work queued */
@@ -1941,11 +1935,6 @@ static void bitmain_flush_work(struct cgpu_info *bitmain)
 		}
 	}
 	bitmain->queued = 0;
-	//bitmain->work_array = 0;
-	//for(i = 0; i < BITMAIN_ARRAY_SIZE; i++) {
-	//      bitmain->works[i] = NULL;
-	//}
-	//pthread_cond_signal(&info->qcond);
 	mutex_unlock(&info->qlock);
 }
 
@@ -1956,11 +1945,12 @@ static void bitmain_shutdown(struct thr_info *thr)
 
 char *set_bitmain_dev(char *arg)
 {
-	if (arg == NULL || strlen(arg) <= 0) {
-		memcpy(opt_bitmain_dev, 0, 256);
-	} else {
+	assert (arg);
+	//if (arg == NULL || strlen(arg) <= 0) {
+	//	memcpy(opt_bitmain_dev, 0, 256);
+	//} else {
 		strncpy(opt_bitmain_dev, arg, 256);
-	}
+	//}
 	applog(LOG_DEBUG, "BTM set device: %s", opt_bitmain_dev);
 	return NULL;
 }
