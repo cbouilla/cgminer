@@ -1231,7 +1231,7 @@ static void bitmain_parse_results(struct cgpu_info *bitmain, struct bitmain_info
 			}
 			memcpy(&packethead, buf + i, sizeof(struct bitmain_packet_head));
 			packethead.length = htole16(packethead.length);
-			if (packethead.length > 1030) {
+			if (packethead.length > 1130) {  // CB. original : 1030
 				applog(LOG_ERR, "bitmain_parse_results bitmain_parse_rxnonce datalen=%d error", packethead.length + 4);
 				continue;
 			}
