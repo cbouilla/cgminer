@@ -36,6 +36,20 @@
  *
  * Rapprocher la production du work de sa consommation. Eviter les queue et les context switches.
  *
+ * Flot normal du work. 
+ * 1) main -> Il est créé.
+ * 2) main -> Il est staged. work->work_block := work_block (variable globale)
+ *
+ * 3) get_work -> Il est extrait de la file "staged". Son attribut "mined" passe à true. Son attribut "device_diff" est fixé.
+ * 4) fill_queue -> Il devient gpu->unqueued_work
+ * 5) __add_queued() -> il est ajouté à cgpu->queued_work
+ * 5.1) Il est renvoyé à bitmain_fill. Là, un numéro (slot) lui est affecté. S'il y a ddéjà quelque chose, 
+           c'est que ce quelque chose est un ancien work terminé. Cans ce cas-là : 
+           	work_completed --> retire de cgpu->queued_work, et free_work() sur l'ancien work.
+           le work est envoyé au FPGA
+ * 
+ * 6) De retour du FPGA, on a un work_id. --> clone_queued_work_byid() renvoie une copie fraiche du work.
+ *
  *
  * Copyright 2011-2014 Con Kolivas
  * Copyright 2011-2012 Luke Dashjr
