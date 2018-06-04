@@ -25,10 +25,6 @@
 #include <fcntl.h>
 
 
-static pthread_mutex_t cgusb_lock;
-static pthread_mutex_t cgusbres_lock;
-static cglock_t cgusb_fd_lock;
-static cgtimer_t usb11_cgt;
 
 // Total device limit
 static int total_count = 0;
@@ -128,8 +124,6 @@ void btm_uninit(struct cgpu_info *cgpu)
 
 void btm_detect(struct device_drv *drv, bool (*device_detect)(const char*))
 {
-	ssize_t count, i;
-
 	applog(LOG_DEBUG, "BTM scan devices: checking for %s devices", drv->name);
 
 	if (total_count >= total_limit) {
