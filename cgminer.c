@@ -1901,12 +1901,11 @@ void set_target(unsigned char *dest_target, double diff)
 
 
 
-char *PREFIXES[3] = {"FOO    / 0x0000000000000000 / Charles Bouillaguet                               ",
+static const char *PREFIXES[3] = {"FOO    / 0x0000000000000000 / Charles Bouillaguet                               ",
 		     "BAR    / 0x0000000000000000 / Claire Delaplace                                  ",
 		     "FOOBAR / 0x0000000000000000 / Pierre-Alain Fouque                               "
 		};
 
-// 5mhash / s
 static const char NIBBLE[16] = {48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 65, 66, 67, 68, 69, 70};
 
 
@@ -1915,14 +1914,17 @@ static void gen_foobar_work(int kind, int64_t *_counter, struct work *work)
 	int64_t counter = *_counter;
 	*_counter = counter + 1;
 
-	strcpy((char *) work->data, PREFIXES[kind]); 
+	char buffer[80];
+	memcpy(buffer, PREFIXES[kind], 80);
+
 	int j = 27;
 	while (counter > 0) {
 		int nibble = counter & 0x000f;
 		counter >>= 4;
-		work->data[j] = NIBBLE[nibble];
+		buffer[j] = NIBBLE[nibble];
 		j--;
 	}
+	flip80(work->data, buffer);
 
 	if (opt_debug) {
 		char *block;
@@ -1992,9 +1994,9 @@ static void submit_work_async(struct work *work)
 	
 	// applog(LOG_DEBUG, "GOT SOMETHING TO REPORT !");
 	if (opt_debug) {
-		char *block;
-
-		block = bin2hex(work->data, 80);
+		uint32_t space[20];
+		flip80(space, work->data);
+		char *block = bin2hex((const unsigned char *) space, 80);
 		applog(LOG_DEBUG, "Solved block %s", block);
 		free(block);
 	}
