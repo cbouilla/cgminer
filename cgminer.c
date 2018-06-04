@@ -31,6 +31,10 @@
  *    Générer les works en boucle dans main()
  *    Modifier send_work_async pour sauvegarder les résultats
  *
+ * Suite du Plan A
+ * ===============
+ *
+ * Rapprocher la production du work de sa consommation. Eviter les queue et les context switches.
  *
  *
  * Copyright 2011-2014 Con Kolivas
@@ -278,8 +282,6 @@ int swork_id;
 
 const char *opt_socks_proxy = NULL;
 int opt_suggest_diff;
-static const char def_conf[] = "cgminer.conf";
-static const char *default_config;
 static int forkpid;
 
 
@@ -604,22 +606,9 @@ char *display_devs(int *ndevs)
 
 /* These options are available from commandline only */
 static struct opt_table opt_cmdline_table[] = {
-	// OPT_WITH_ARG("--config|-c",
-	// 	     load_config, NULL, &opt_set_null,
-	// 	     "Load a JSON-format configuration file\n"
-	// 	     "See example.conf for an example configuration."),
-	// OPT_WITH_ARG("--default-config",
-	// 	     set_default_config, NULL, &opt_set_null,
-	// 	     "Specify the filename of the default config file\n"
-	// 	     "Loaded at start and used when saving without a name."),
 	OPT_WITHOUT_ARG("--help|-h",
 			opt_verusage_and_exit, NULL,
 			"Print this message"),
-// #if defined(USE_USBUTILS)
-// 	OPT_WITHOUT_ARG("--ndevs|-n",
-// 			display_devs, &nDevs,
-// 			"Display all USB devices and exit"),
-// #endif
 	OPT_WITHOUT_ARG("--version|-V",
 			opt_version_and_exit, packagename,
 			"Display version and exit"),
@@ -919,13 +908,9 @@ static void kill_mining(void)
 		if (thr && PTH(thr) != 0L)
 			pth = &thr->pth;
 		thr_info_cancel(thr);
-#ifndef WIN32
+
 		if (pth && *pth)
 			pthread_join(*pth, NULL);
-#else
-		if (pth && pth->p)
-			pthread_join(*pth, NULL);
-#endif
 	}
 }
 
@@ -992,14 +977,6 @@ void app_restart(void)
 
 	cg_completion_timeout(&__kill_work, NULL, 5000);
 	clean_up(true);
-
-#if defined(unix) || defined(__APPLE__)
-	if (forkpid > 0) {
-		kill(forkpid, SIGTERM);
-		forkpid = 0;
-	}
-#endif
-
 	execv(initial_args[0], (EXECV_2ND_ARG_TYPE)initial_args);
 	applog(LOG_WARNING, "Failed to restart application");
 }
@@ -1019,39 +996,7 @@ static void _stage_work(struct work *work);
 	WORK = NULL; \
 } while (0)
 
-/* Adjust an existing char ntime field with a relative noffset */
-static void modify_ntime(char *ntime, int noffset)
-{
-	unsigned char bin[4];
-	uint32_t h32, *be32 = (uint32_t *)bin;
 
-	hex2bin(bin, ntime, 4);
-	h32 = be32toh(*be32) + noffset;
-	*be32 = htobe32(h32);
-	__bin2hex(ntime, bin, 4);
-}
-
-void roll_work(struct work *work)
-{
-	uint32_t *work_ntime;
-	uint32_t ntime;
-
-	work_ntime = (uint32_t *)(work->data + 68);
-	ntime = be32toh(*work_ntime);
-	ntime++;
-	*work_ntime = htobe32(ntime);
-	local_work++;
-	work->rolls++;
-	work->nonce = 0;
-	applog(LOG_DEBUG, "Successfully rolled work");
-	/* Change the ntime field if this is stratum work */
-	if (work->ntime)
-		modify_ntime(work->ntime, 1);
-
-	/* This is now a different work item so it needs a different ID for the
-	 * hashtable */
-	work->id = total_work_inc();
-}
 
 struct work *make_clone(struct work *work)
 {
@@ -1193,20 +1138,6 @@ uint64_t share_ndiff(const struct work *work)
 	return ret;
 }
 
-static void regen_hash(struct work *work)
-{
-	uint32_t *data32 = (uint32_t *)(work->data);
-	unsigned char swap[80];
-	uint32_t *swap32 = (uint32_t *)swap;
-	unsigned char hash1[32];
-
-	flip80(swap32, data32);
-	sha256(swap, 80, hash1);
-	sha256(hash1, 32, (unsigned char *)(work->hash));
-}
-
-
-
 void _discard_work(struct work *work)
 {
 	if (!work->clone && !work->rolls && !work->mined) {
@@ -1221,7 +1152,6 @@ void _discard_work(struct work *work)
 		applog(LOG_DEBUG, "Discarded cloned or rolled work");
 	free_work(work);
 }
-
 
 /* A generic wait function for threads that poll that will wait a specified
  * time tdiff waiting on the pthread conditional that is broadcast when a
@@ -1249,31 +1179,6 @@ int restart_wait(struct thr_info *thr, unsigned int mstime)
 	mutex_unlock(&restart_lock);
 
 	return rc;
-}
-
-/* Search to see if this string is from a block that has been seen before */
-static bool block_exists(char *hexstr)
-{
-	struct block *s;
-
-	rd_lock(&blk_lock);
-	HASH_FIND_STR(blocks, hexstr, s);
-	rd_unlock(&blk_lock);
-
-	if (s)
-		return true;
-	return false;
-}
-
-/* Tests if this work is from a block that has been seen before */
-static inline bool from_existing_block(struct work *work)
-{
-	char *hexstr = bin2hex(work->data + 8, 18);
-	bool ret;
-
-	ret = block_exists(hexstr);
-	free(hexstr);
-	return ret;
 }
 
 static int tv_sort(struct work *worka, struct work *workb)
@@ -1404,29 +1309,7 @@ static void set_lowprio(void)
 		applog(LOG_INFO, "Unable to set thread to low priority");
 }
 
-void default_save_file(char *filename)
-{
-	if (default_config && *default_config) {
-		strcpy(filename, default_config);
-		return;
-	}
 
-	if (getenv("HOME") && *getenv("HOME")) {
-	        strcpy(filename, getenv("HOME"));
-		strcat(filename, "/");
-	}
-	else
-		strcpy(filename, "");
-	strcat(filename, ".cgminer/");
-	mkdir(filename, 0777);
-	strcat(filename, def_conf);
-}
-
-
-/* Sole work devices are serialised wrt calling get_work so they report in on
- * each pass through their scanhash function as well as in get_work whereas
- * queued work devices work asynchronously so get them to report in and out
- * only across get_work. */
 static void thread_reportin(struct thr_info *thr)
 {
 	thr->getwork = false;
@@ -1847,58 +1730,7 @@ void inc_dev_status(int max_fan, int max_temp)
 	mutex_unlock(&stats_lock);
 }
 
-/* Fills in the work nonce and builds the output data in work->hash */
-static void rebuild_nonce(struct work *work, uint32_t nonce)
-{
-	uint32_t *work_nonce = (uint32_t *)(work->data + 64 + 12);
 
-	*work_nonce = htole32(nonce);
-
-	regen_hash(work);
-}
-
-/* For testing a nonce against diff 1 */
-bool test_nonce(struct work *work, uint32_t nonce)
-{
-	uint32_t *hash_32 = (uint32_t *)(work->hash + 28);
-
-	rebuild_nonce(work, nonce);
-	return (*hash_32 == 0);
-}
-
-/* For testing a nonce against an arbitrary diff */
-bool test_nonce_diff(struct work *work, uint32_t nonce, double diff)
-{
-	uint64_t *hash64 = (uint64_t *)(work->hash + 24), diff64;
-
-	rebuild_nonce(work, nonce);
-	diff64 = 0x00000000ffff0000ULL;
-	diff64 /= diff;
-
-	return (le64toh(*hash64) <= diff64);
-}
-
-static void update_work_stats(struct thr_info *thr, struct work *work)
-{
-	double test_diff = current_diff;
-
-	work->share_diff = share_diff(work);
-
-	if (unlikely(work->share_diff >= test_diff)) {
-		work->block = true;
-		work->pool->solved++;
-		found_blocks++;
-		work->mandatory = true;
-		applog(LOG_NOTICE, "Found block for pool %d!", work->pool->pool_no);
-	}
-
-	mutex_lock(&stats_lock);
-	total_diff1 += work->device_diff;
-	thr->cgpu->diff1 += work->device_diff;
-	work->pool->diff1 += work->device_diff;
-	thr->cgpu->last_device_valid_work = time(NULL);
-	mutex_unlock(&stats_lock);
-}
 
 void inc_work_stats(struct thr_info *thr, struct pool *pool, int diff1)
 {
@@ -1910,76 +1742,6 @@ void inc_work_stats(struct thr_info *thr, struct pool *pool, int diff1)
 	mutex_unlock(&stats_lock);
 }
 
-
-/* To be used once the work has been tested to be meet diff1 and has had its
- * nonce adjusted. Returns true if the work target is met. */
-bool submit_tested_work(struct thr_info *thr, struct work *work)
-{
-	struct work *work_out;
-	update_work_stats(thr, work);
-
-	if (!fulltest(work->hash, work->target)) {
-		applog(LOG_INFO, "%s %d: Share above target", thr->cgpu->drv->name,
-		       thr->cgpu->device_id);
-		return false;
-	}
-	work_out = copy_work(work);
-	submit_work_async(work_out);
-	return true;
-}
-
-/* Rudimentary test to see if cgpu has returned the same nonce twice in a row which is
- * always going to be a duplicate which should be reported as a hw error. */
-static bool new_nonce(struct thr_info *thr, uint32_t nonce)
-{
-	struct cgpu_info *cgpu = thr->cgpu;
-
-	if (unlikely(cgpu->last_nonce == nonce)) {
-		applog(LOG_INFO, "%s %d duplicate share detected as HW error",
-		       cgpu->drv->name, cgpu->device_id);
-		return false;
-	}
-	cgpu->last_nonce = nonce;
-	return true;
-}
-
-/* Returns true if nonce for work was a valid share and not a dupe of the very last
- * nonce submitted by this device. */
-bool submit_nonce(struct thr_info *thr, struct work *work, uint32_t nonce)
-{
-	if (new_nonce(thr, nonce) && test_nonce(work, nonce))
-		submit_tested_work(thr, work);
-	else {
-		inc_hw_errors(thr);
-		return false;
-	}
-
-	return true;
-}
-
-bool submit_nonce_1(struct thr_info *thr, struct work *work, uint32_t nonce, int * nofull)
-{
-	if(nofull) *nofull = 0;
-	if (test_nonce(work, nonce)) {
-		update_work_stats(thr, work);
-		if (!fulltest(work->hash, work->target)) {
-			if(nofull) *nofull = 1;
-			applog(LOG_INFO, "Share above target");
-			return false;
-		}
-	} else {
-		inc_hw_errors(thr);
-		return false;
-	}
-	return true;
-}
-
-void submit_nonce_2(struct work *work)
-{
-	struct work *work_out;
-	work_out = copy_work(work);
-	submit_work_async(work_out);
-}
 
 bool submit_nonce_direct(struct thr_info *thr, struct work *work, uint32_t nonce)
 {
@@ -2096,54 +1858,6 @@ struct work *get_queue_work(struct thr_info *thr, struct cgpu_info *cgpu, int th
 
 	add_queued(cgpu, work);
 	return work;
-}
-
-/* This function is for finding an already queued work item in the
- * given que hashtable. Code using this function must be able
- * to handle NULL as a return which implies there is no matching work.
- * The calling function must lock access to the que if it is required.
- * The common values for midstatelen, offset, datalen are 32, 64, 12 */
-struct work *__find_work_bymidstate(struct work *que, char *midstate, size_t midstatelen, char *data, int offset, size_t datalen)
-{
-	struct work *work, *tmp, *ret = NULL;
-
-	HASH_ITER(hh, que, work, tmp) {
-		if (memcmp(work->midstate, midstate, midstatelen) == 0 &&
-		    memcmp(work->data + offset, data, datalen) == 0) {
-			ret = work;
-			break;
-		}
-	}
-
-	return ret;
-}
-
-/* This function is for finding an already queued work item in the
- * device's queued_work hashtable. Code using this function must be able
- * to handle NULL as a return which implies there is no matching work.
- * The common values for midstatelen, offset, datalen are 32, 64, 12 */
-struct work *find_queued_work_bymidstate(struct cgpu_info *cgpu, char *midstate, size_t midstatelen, char *data, int offset, size_t datalen)
-{
-	struct work *ret;
-
-	rd_lock(&cgpu->qlock);
-	ret = __find_work_bymidstate(cgpu->queued_work, midstate, midstatelen, data, offset, datalen);
-	rd_unlock(&cgpu->qlock);
-
-	return ret;
-}
-
-struct work *clone_queued_work_bymidstate(struct cgpu_info *cgpu, char *midstate, size_t midstatelen, char *data, int offset, size_t datalen)
-{
-	struct work *work, *ret = NULL;
-
-	rd_lock(&cgpu->qlock);
-	work = __find_work_bymidstate(cgpu->queued_work, midstate, midstatelen, data, offset, datalen);
-	if (work)
-		ret = copy_work(work);
-	rd_unlock(&cgpu->qlock);
-
-	return ret;
 }
 
 /* This function is for finding an already queued work item in the
@@ -2302,12 +2016,6 @@ void reinit_device(struct cgpu_info *cgpu)
 {
 	if (cgpu->deven == DEV_DISABLED)
 		return;
-
-#ifdef USE_USBUTILS
-	/* Attempt a usb device reset if the device has gone sick */
-	if (cgpu->usbdev && cgpu->usbdev->handle)
-		libusb_reset_device(cgpu->usbdev->handle);
-#endif
 	cgpu->drv->reinit_device(cgpu);
 }
 
@@ -2662,11 +2370,6 @@ bool add_cgpu(struct cgpu_info *cgpu)
 		devices[total_devices++] = cgpu;
 
 	adjust_mostdevs();
-#ifdef USE_USBUTILS
-	if (cgpu->usbdev && !cgpu->unique_id && cgpu->usbdev->serial_string &&
-	    strlen(cgpu->usbdev->serial_string) > 4)
-		cgpu->unique_id = str_text(cgpu->usbdev->serial_string);
-#endif
 	return true;
 }
 
@@ -2682,14 +2385,6 @@ struct device_drv *copy_drv(struct device_drv *drv)
 	copy->copy = true;
 	return copy;
 }
-
-#ifdef USE_USBUTILS
-
-
-#define DRIVER_DRV_DETECT_HOTPLUG(X) X##_drv.drv_detect(true);
-
-#endif
-
 
 
 int main(int argc, char *argv[])

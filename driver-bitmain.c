@@ -10,6 +10,7 @@
 #include "config.h"
 
 #include <limits.h>
+#include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <sys/time.h>
@@ -932,30 +933,11 @@ static bool bitmain_decode_nonce(struct thr_info *thr, struct cgpu_info *bitmain
 {
 	info = bitmain->device_data;
 	//info->matching_work[work->subid]++;
-	if (opt_bitmain_hwerror) {
-		applog(LOG_DEBUG, "BitMain: submit direct nonce = %08x", nonce);
-		if (opt_bitmain_checkall) {
-			applog(LOG_DEBUG, "BitMain check all");
-			return submit_nonce(thr, work, nonce);
-		} else {
-			if (opt_bitmain_checkn2diff) {
-				int diff = 0;
-				diff = work->sdiff;
-				if (diff && (diff & (diff - 1))) {
-					applog(LOG_DEBUG, "BitMain %d not diff 2 submit_nonce", diff);
-					return submit_nonce(thr, work, nonce);
-				} else {
-					applog(LOG_DEBUG, "BitMain %d diff 2 submit_nonce_direct", diff);
-					return submit_nonce_direct(thr, work, nonce);
-				}
-			} else {
-				return submit_nonce_direct(thr, work, nonce);
-			}
-		}
-	} else {
-		applog(LOG_DEBUG, "BitMain: submit nonce = %08x", nonce);
-		return submit_nonce(thr, work, nonce);
-	}
+	assert(opt_bitmain_hwerror);
+	assert(!opt_bitmain_checkn2diff);
+
+	applog(LOG_DEBUG, "BitMain: submit direct nonce = %08x", nonce);
+	return submit_nonce_direct(thr, work, nonce);
 }
 
 static void bitmain_inc_nvw(struct bitmain_info *info, struct thr_info *thr)
