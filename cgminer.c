@@ -1533,7 +1533,7 @@ static void gen_foobar_work(int kind, int64_t *_counter, struct work *work)
 	}
 
 	calc_midstate(work);
-	work->sdiff = 1;
+	work->sdiff = 4;   // max @ sdiff = 16, 8
 	//set_target(work->target, 1);
 
 	local_work++;
