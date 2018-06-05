@@ -1759,17 +1759,10 @@ struct work *get_queue_work(struct thr_info *thr, struct cgpu_info *cgpu, int th
  * given que hashtable. Code using this function must be able
  * to handle NULL as a return which implies there is no matching work.
  * The calling function must lock access to the que if it is required. */
-struct work *__find_work_byid(struct work *que, uint32_t id)
+struct work *__find_work_byid(struct work *queue, uint32_t id)
 {
-	struct work *work, *tmp, *ret = NULL;
-
-	HASH_ITER(hh, que, work, tmp) {
-		if (work->id == id) {
-			ret = work;
-			break;
-		}
-	}
-
+	struct work *ret = NULL;
+	HASH_FIND_INT(queue, &id, ret);
 	return ret;
 }
 
