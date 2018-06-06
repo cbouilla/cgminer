@@ -33,7 +33,7 @@
 #include "hexdump.c"
 #include "util.h"
 
-#define BITMAIN_CALC_DIFF1	1
+#define BITMAIN_CALC_DIFF1	0
 
 
 #define BITMAIN_TEST_PRINT_WORK 0
@@ -348,7 +348,7 @@ static bool get_option_freq(int *timeout, int *frequency, char *frequency_t, uin
 		char buf[BUFSIZ+1];
 		char *ptr, *comma, *colon, *colon2;
 		size_t max;
-		int i, tmp;
+		int tmp;
 		
 		ptr = opt_bitmain_freq;
 
@@ -841,8 +841,6 @@ static int bitmain_parse_rxnonce(const uint8_t * data, int datalen, struct bitma
 
 static int bitmain_read(struct cgpu_info *bitmain, unsigned char *buf, size_t bufsize, int timeout, int ep)
 {
-	int err = 0;
-	size_t total = 0;
 	(void) timeout;
 	(void) ep;
 
@@ -850,16 +848,8 @@ static int bitmain_read(struct cgpu_info *bitmain, unsigned char *buf, size_t bu
 		applog(LOG_WARNING, "bitmain_read parameter error bufsize(%d)", bufsize);
 		return -1;
 	}
-	// if (opt_bitmain_dev_usb) {
-	//	err = usb_read_once_timeout(bitmain, buf, bufsize, &readlen, timeout, ep);
-	//	applog(LOG_DEBUG, "%s%i: Get bitmain read got readlen %d err %d", bitmain->drv->name, bitmain->device_id, readlen, err);
-	//	total = readlen;
-	// } else { 
-	err = btm_read(bitmain, buf, bufsize);
-	total = err;
-	// }
- //out:
-	return total;
+
+	return btm_read(bitmain, (char *) buf, bufsize);
 }
 
 static int bitmain_write(struct cgpu_info *bitmain, char *buf, ssize_t len, int ep)
@@ -1028,8 +1018,6 @@ static void bitmain_update_temps(struct cgpu_info *bitmain, struct bitmain_info 
 	}
 }
 
-extern void cg_logwork_uint32(struct work *work, uint32_t nonce, bool ok);
-
 static void bitmain_parse_results(struct cgpu_info *bitmain, struct bitmain_info *info, struct thr_info *thr, uint8_t * buf, int *offset)
 {
 	int i, j, n, m, r, errordiff, spare = BITMAIN_READ_SIZE;
@@ -1160,6 +1148,7 @@ static void bitmain_parse_results(struct cgpu_info *bitmain, struct bitmain_info
 			} else {
 				struct pool *pool = NULL;
 				for (j = 0; j < nonce_num; j++) {
+					// hit
 					work = clone_queued_work_byid(bitmain, rxnoncedata.nonces[j].work_id);
 					if (work) {
 						pool = work->pool;
@@ -1167,7 +1156,6 @@ static void bitmain_parse_results(struct cgpu_info *bitmain, struct bitmain_info
 							applog(LOG_ERR, "BitMain: bitmain_parse_rxnonce work(%d) nonce stale", rxnoncedata.nonces[j].work_id);
 						} else {
 							if (bitmain_decode_nonce(thr, bitmain, info, rxnoncedata.nonces[j].nonce, work)) {
-								cg_logwork_uint32(work, rxnoncedata.nonces[j].nonce, true);
 								if (opt_bitmain_hwerror) {
 #ifndef BITMAIN_CALC_DIFF1
 									mutex_lock(&info->qlock);
@@ -1263,7 +1251,7 @@ static void bitmain_running_reset(struct cgpu_info *bitmain, struct bitmain_info
 	info->reset = false;
 }
 
-static void *bitmain_get_results(void *userdata)
+void *bitmain_get_results(void *userdata)
 {
 	struct cgpu_info *bitmain = (struct cgpu_info *)userdata;
 	struct bitmain_info *info = bitmain->device_data;
@@ -1284,7 +1272,7 @@ static void *bitmain_get_results(void *userdata)
 
 		if (offset >= (int)BITMAIN_READ_SIZE) {
 			//applog(LOG_DEBUG, "======start bitmain_get_results ");
-			bitmain_parse_results(bitmain, info, thr, readbuf, &offset);
+			bitmain_parse_results(bitmain, info, thr, (unsigned char *) readbuf, &offset);
 			//applog(LOG_DEBUG, "======stop bitmain_get_results ");
 		}
 

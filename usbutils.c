@@ -142,17 +142,11 @@ void btm_detect(struct device_drv *drv, bool (*device_detect)(const char*))
 
 int btm_read(struct cgpu_info *cgpu, char *buf, size_t bufsize)
 {
-	int err = 0;
-	//applog(LOG_DEBUG, "btm_read ----- %d -----", bufsize);
-	err = read(cgpu->device_fd, buf, bufsize);
-	return err;
+	return read(cgpu->device_fd, buf, bufsize);
 }
 
 int btm_write(struct cgpu_info *cgpu, char *buf, size_t bufsize)
 {
-	int err = 0;
-	//applog(LOG_DEBUG, "btm_write ----- %d -----", bufsize);
-	err = write(cgpu->device_fd, buf, bufsize);
-	return err;
+	return write(cgpu->device_fd, buf, bufsize);
 }
 

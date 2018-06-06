@@ -904,7 +904,6 @@ void _cg_memcpy(void *dest, const void *src, unsigned int n, const char *file, c
 
 int cg_timeval_subtract(struct timeval* result, struct timeval* x, struct timeval* y)
 {
-	int nsec = 0;
 	if(x->tv_sec > y->tv_sec)
 		return -1;
 
@@ -1093,12 +1092,4 @@ int check_asicnum(int asic_num, unsigned char nonce)
 	default:
 		return 0;
 	}
-}
-
-void cg_logwork(struct work *work, unsigned char *nonce_bin, bool ok)
-{
-}
-
-void cg_logwork_uint32(struct work *work, uint32_t nonce, bool ok)
-{
 }

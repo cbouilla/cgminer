@@ -1390,5 +1390,7 @@ extern bool isdupnonce(struct cgpu_info *cgpu, struct work *work, uint32_t nonce
 
 extern void rev(unsigned char *s, size_t l);
 extern int check_asicnum(int asic_num, unsigned char nonce);
+extern void *bitmain_get_results(void *userdata);
+
 
 #endif /* __MINER_H__ */
