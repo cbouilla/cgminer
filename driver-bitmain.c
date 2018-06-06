@@ -1346,13 +1346,14 @@ static bool bitmain_prepare(struct thr_info *thr)
 		quit(1, "Failed to pthread_cond_init bitmain qcond");
 	cgsem_init(&info->write_sem);
 
-	applog(LOG_NOTICE, "bitmain_prepare: skip creating thread for bitmain_get_results()");
-
-	// if (pthread_create(&info->read_thr, NULL, bitmain_get_results, (void *)bitmain))
-	//	quit(1, "Failed to create bitmain read_thr");
+	if (pthread_create(&info->read_thr, NULL, bitmain_get_results, (void *)bitmain))
+		quit(1, "Failed to create bitmain read_thr");
 
 	//if (pthread_create(&info->write_thr, NULL, bitmain_send_tasks, (void *)bitmain))
 	//      quit(1, "Failed to create bitmain write_thr");
+
+	bitmain_init(bitmain);
+
 	return true;
 }
 
