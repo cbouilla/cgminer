@@ -1148,7 +1148,6 @@ static void bitmain_parse_results(struct cgpu_info *bitmain, struct bitmain_info
 			} else {
 				struct pool *pool = NULL;
 				for (j = 0; j < nonce_num; j++) {
-					// hit
 					work = clone_queued_work_byid(bitmain, rxnoncedata.nonces[j].work_id);
 					if (work) {
 						pool = work->pool;
