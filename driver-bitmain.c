@@ -33,7 +33,7 @@
 #include "hexdump.c"
 #include "util.h"
 
-#define BITMAIN_CALC_DIFF1	0
+#define BITMAIN_CALC_DIFF1	1
 
 
 #define BITMAIN_TEST_PRINT_WORK 0

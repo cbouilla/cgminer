@@ -99,8 +99,6 @@ char *curly = ":D";
 #include <sys/wait.h>
 
 
-int64_t work_counter = 0;
-
 #include "driver-bitmain.h"
 #define USE_FPGA
 
@@ -138,10 +136,12 @@ bool opt_compact;
 const int opt_cutofftemp = 95;
 int opt_log_interval = 5;
 int opt_queue = 1;
+static int max_queue = 2;
 int opt_scantime = -1;
 int opt_expiry = 120;
 unsigned long long global_hashrate;
 unsigned long global_quota_gcd = 1;
+time_t last_getwork;
 
 
 int nDevs;
@@ -175,6 +175,7 @@ const bool opt_logwork_diff = false;
 
 const bool opt_delaynet;
 const bool opt_disable_pool;
+static bool no_work;
 
 bool opt_worktime;
 
@@ -256,6 +257,7 @@ int g_max_fan, g_max_temp;
 int64_t total_accepted, total_rejected, total_diff1;
 int64_t total_getworks, total_stale, total_discarded;
 double total_diff_accepted, total_diff_rejected, total_diff_stale;
+static int staged_rollable;
 unsigned int new_blocks;
 static unsigned int work_block = 0;
 unsigned int found_blocks;
@@ -715,6 +717,12 @@ void decay_time(double *f, double fadd, double fsecs, double interval)
 	*f /= ftotal;
 }
 
+static int __total_staged(void)
+{
+	return HASH_COUNT(staged_work);
+}
+
+
 double total_secs = 1.0;
 double last_total_secs = 1.0;
 static char statusline[256];
@@ -995,6 +1003,13 @@ static void sighandler(int __maybe_unused sig)
 	kill_work();
 }
 
+static void _stage_work(struct work *work);
+
+#define stage_work(WORK) do { \
+	_stage_work(WORK); \
+	WORK = NULL; \
+} while (0)
+
 
 
 struct work *make_clone(struct work *work)
@@ -1179,6 +1194,41 @@ int restart_wait(struct thr_info *thr, unsigned int mstime)
 
 	return rc;
 }
+
+static int tv_sort(struct work *worka, struct work *workb)
+{
+	return worka->tv_staged.tv_sec - workb->tv_staged.tv_sec;
+}
+
+static bool work_rollable(struct work *work)
+{
+	return (!work->clone && work->rolltime);
+}
+
+static bool hash_push(struct work *work)
+{
+	bool rc = true;
+
+	mutex_lock(stgd_lock);
+	staged_work_items++;
+	if (likely(!getq->frozen)) {
+		HASH_ADD_INT(staged_work, id, work);
+		HASH_SORT(staged_work, tv_sort);
+	} else
+		rc = false;
+	pthread_cond_broadcast(&getq->cond);
+	mutex_unlock(stgd_lock);
+
+	return rc;
+}
+
+static void _stage_work(struct work *work)
+{
+	applog(LOG_DEBUG, "Pushing work from pool [FOOBAR] to hash queue");
+	work->work_block = work_block;
+	hash_push(work);
+}
+
 
 
 
@@ -1399,7 +1449,7 @@ static void hashmeter(int thr_id, uint64_t hashes_done)
 		global_hashrate = llround(total_rolling) * 1000000;
 		g_local_mhashes_dones[g_local_mhashes_index] = 0;
 	}
-	g_local_mhashes_dones[g_local_mhashes_index] += hashes_done;
+		g_local_mhashes_dones[g_local_mhashes_index] += hashes_done;
 	total_secs = tdiff(&total_tv_end, &total_tv_start);
 
 	if (total_secs - last_total_secs > 86400) {
@@ -1443,6 +1493,77 @@ static void hashmeter(int thr_id, uint64_t hashes_done)
 	}
 }
 
+
+static bool work_filled;
+static bool work_emptied;
+
+/* If this is called non_blocking, it will return NULL for work so that must
+ * be handled. */
+static struct work *hash_pop(bool blocking)
+{
+	struct work *work = NULL, *tmp;
+	int hc;
+
+	mutex_lock(stgd_lock);
+	if (!HASH_COUNT(staged_work)) {
+		/* Increase the queue if we reach zero and we know we can reach
+		 * the maximum we're asking for. */
+		if (work_filled && max_queue < opt_queue) {
+			max_queue++;
+			work_filled = false;
+		}
+		work_emptied = true;
+		if (!blocking)
+			goto out_unlock;
+		do {
+			struct timespec then;
+			struct timeval now;
+			int rc;
+
+			cgtime(&now);
+			then.tv_sec = now.tv_sec + 10;
+			then.tv_nsec = now.tv_usec * 1000;
+			pthread_cond_signal(&gws_cond);
+			rc = pthread_cond_timedwait(&getq->cond, stgd_lock, &then);
+			/* Check again for !no_work as multiple threads may be
+				* waiting on this condition and another may set the
+				* bool separately. */
+			if (rc && !no_work) {
+				no_work = true;
+				applog(LOG_WARNING, "Waiting for work to be available from pools.");
+			}
+		} while (!HASH_COUNT(staged_work));
+	}
+
+	if (no_work) {
+		applog(LOG_WARNING, "Work available from pools, resuming.");
+		no_work = false;
+	}
+
+	hc = HASH_COUNT(staged_work);
+	/* Find clone work if possible, to allow masters to be reused */
+	if (hc > staged_rollable) {
+		HASH_ITER(hh, staged_work, work, tmp) {
+			if (!work_rollable(work))
+				break;
+		}
+	} else
+		work = staged_work;
+	HASH_DEL(staged_work, work);
+	
+	/* Signal the getwork scheduler to look for more work */
+	pthread_cond_signal(&gws_cond);
+
+	/* Signal hash_pop again in case there are mutliple hash_pop waiters */
+	pthread_cond_signal(&getq->cond);
+
+	/* Keep track of last getwork grabbed */
+	last_getwork = time(NULL);
+out_unlock:
+	mutex_unlock(stgd_lock);
+
+	return work;
+}
 
 void set_target(unsigned char *dest_target, double diff)
 {
@@ -1533,51 +1654,51 @@ static void gen_foobar_work(int kind, int64_t *_counter, struct work *work)
 	}
 
 	calc_midstate(work);
-	work->sdiff = 2;   // max @ sdiff = 16, 8
-	//set_target(work->target, 1);
+	work->sdiff = 2; 
 
 	local_work++;
 
 	work->nonce = 0;
 	calc_diff(work, work->sdiff);
 	cgtime(&work->tv_staged);
-	work->work_block = work_block;
 }
 
 
 
 
 
+
+/* The time difference in seconds between when this device last got work via
+ * get_work() and generated a valid share. */
+int share_work_tdiff(struct cgpu_info *cgpu)
+{
+	return last_getwork - cgpu->last_device_valid_work;
+}
+
 struct work *get_work(struct thr_info *thr, const int thr_id)
 {
 	struct cgpu_info *cgpu = thr->cgpu;
 	struct work *work = NULL;
+	time_t diff_t;
 
-	work = make_work();
-	gen_foobar_work(0, &work_counter, work);
-	applog(LOG_DEBUG, "Generated foobar work");
-	// B hash_push(work);
-	// A stage_work(work);
-
-	// B thread_reportout(thr);
+	thread_reportout(thr);
 	applog(LOG_DEBUG, "Popping work from get queue to get work");
-	// B diff_t = time(NULL);
-	// B while (!work) {
-	// B	work = hash_pop(true);
-	// B }
-	// B diff_t = time(NULL) - diff_t;
+	diff_t = time(NULL);
+	while (!work) {
+		work = hash_pop(true);
+	}
+	diff_t = time(NULL) - diff_t;
 	/* Since this is a blocking function, we need to add grace time to
 	 * the device's last valid work to not make outages appear to be
 	 * device failures. */
-	// B if (diff_t > 0) {
-	// B 	applog(LOG_DEBUG, "Get work blocked for %d seconds", (int)diff_t);
-	// B 	cgpu->last_device_valid_work += diff_t;
-	// B }
+	if (diff_t > 0) {
+		applog(LOG_DEBUG, "Get work blocked for %d seconds", (int)diff_t);
+		cgpu->last_device_valid_work += diff_t;
+	}
 	applog(LOG_DEBUG, "Got work from get queue to get work for thread %d", thr_id);
 
 	work->thr_id = thr_id;
-	staged_work_items++;
-
+	
 	thread_reportin(thr);
 	work->mined = true;
 	work->device_diff = MIN(cgpu->drv->max_diff, work->work_difficulty);
@@ -1600,6 +1721,7 @@ static void submit_work_async(struct work *work)
 	}
 
 	nonce_reported++;
+	free_work(work);
 }
 
 void inc_hw_errors(struct thr_info *thr)
@@ -1729,8 +1851,6 @@ struct work *__get_queued(struct cgpu_info *cgpu)
 struct work *get_queued(struct cgpu_info *cgpu)
 {
 	struct work *work;
-
-
 
 	wr_lock(&cgpu->qlock);
 	work = __get_queued(cgpu);
@@ -2278,6 +2398,7 @@ struct device_drv *copy_drv(struct device_drv *drv)
 int main(int argc, char *argv[])
 {
 	struct sigaction handler;
+	struct work *work = NULL;
 	struct thr_info *thr;
 	struct block *block;
 	int i;
@@ -2491,6 +2612,8 @@ int main(int argc, char *argv[])
 		}
 	}
 #endif
+
+	applog(LOG_NOTICE, "CB: no pools anymore");
 	
 
 	total_mhashes_done = 0;
@@ -2526,35 +2649,34 @@ int main(int argc, char *argv[])
 	set_highprio();
 
 	/* Once everything is set up, main() becomes the getwork scheduler */
-	applog(LOG_NOTICE, "main: waiting");
-	pthread_join(mining_thr[0]->pth, NULL);
+	int64_t counter = 0;
 
-	// while (42) {
-	// 	int ts, max_staged = max_queue;
+	while (42) {
+		int ts, max_staged = max_queue;
 
-	// 	mutex_lock(stgd_lock);
-	// 	ts = __total_staged();
+		mutex_lock(stgd_lock);
+		ts = __total_staged();
 
-	// 	/* Wait until hash_pop tells us we need to create more work */
-	// 	if (ts > max_staged) {
-	// 		if (work_emptied && max_queue < opt_queue) {
-	// 			max_queue++;
-	// 			work_emptied = false;
-	// 		}
-	// 		work_filled = true;
-	// 		pthread_cond_wait(&gws_cond, stgd_lock);
-	// 		ts = __total_staged();
-	// 	}
-	// 	mutex_unlock(stgd_lock);
+		/* Wait until hash_pop tells us we need to create more work */
+		if (ts > max_staged) {
+			if (work_emptied && max_queue < opt_queue) {
+				max_queue++;
+				work_emptied = false;
+			}
+			work_filled = true;
+			pthread_cond_wait(&gws_cond, stgd_lock);
+			ts = __total_staged();
+		}
+		mutex_unlock(stgd_lock);
 
-	// 	// utile ?
-	// 	if (work)
-	// 		discard_work(work);
-	// 	work = make_work();
+		// utile ?
+		if (work)
+			discard_work(work);
+		work = make_work();
 
-	// 	gen_foobar_work(0, &counter, work);
-	// 	applog(LOG_DEBUG, "Generated foobar work");
-	// 	stage_work(work);
-	// }
+		gen_foobar_work(0, &counter, work);
+		applog(LOG_DEBUG, "Generated foobar work");
+		stage_work(work);
+	}
 	return 0;
 }
