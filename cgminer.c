@@ -2438,10 +2438,8 @@ int main(int argc, char *argv[])
 	for (i = 0; i < total_devices; ++i)
 		enable_device(devices[i]);
 
-#ifndef LOCAL
 	if (!total_devices)
 		early_quit(1, "All devices disabled, cannot mine!");
-#endif
 
 	most_devices = total_devices;
 
@@ -2455,8 +2453,6 @@ int main(int argc, char *argv[])
 		logcursor = logstart + 1;
 	}
 
-	// currentpool = pools[0];
-
 	mining_thr = calloc(mining_threads, sizeof(thr));
 	if (!mining_thr)
 		early_quit(1, "Failed to calloc mining_thr");
@@ -2467,7 +2463,6 @@ int main(int argc, char *argv[])
 	}
 
 	// Start threads
-#ifndef LOCAL   // for debugging purposes
 	int k = 0;
 	for (i = 0; i < total_devices; ++i) {
 		struct cgpu_info *cgpu = devices[i];
@@ -2497,7 +2492,6 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
-#endif
 	
 
 	total_mhashes_done = 0;
@@ -2524,8 +2518,6 @@ int main(int argc, char *argv[])
 		early_quit(1, "watchdog thread create failed");
 	pthread_detach(thr->pth);
 
-	// ATTENTION, J'AI VIRE LE THREAD API
-
 	/* Just to be sure */
 	if (total_control_threads != 8)
 		early_quit(1, "incorrect total_control_threads (%d) should be 8", total_control_threads);
@@ -2533,35 +2525,9 @@ int main(int argc, char *argv[])
 	set_highprio();
 
 	/* Once everything is set up, main() becomes the getwork scheduler */
-	applog(LOG_NOTICE, "main: waiting");
-	pthread_join(mining_thr[0]->pth, NULL);
+	applog(LOG_NOTICE, "main: running bitmain_get_results(cgpu_bitmain)");
+	
+	bitmain_get_results(devices[0]);
 
-	// while (42) {
-	// 	int ts, max_staged = max_queue;
-
-	// 	mutex_lock(stgd_lock);
-	// 	ts = __total_staged();
-
-	// 	/* Wait until hash_pop tells us we need to create more work */
-	// 	if (ts > max_staged) {
-	// 		if (work_emptied && max_queue < opt_queue) {
-	// 			max_queue++;
-	// 			work_emptied = false;
-	// 		}
-	// 		work_filled = true;
-	// 		pthread_cond_wait(&gws_cond, stgd_lock);
-	// 		ts = __total_staged();
-	// 	}
-	// 	mutex_unlock(stgd_lock);
-
-	// 	// utile ?
-	// 	if (work)
-	// 		discard_work(work);
-	// 	work = make_work();
-
-	// 	gen_foobar_work(0, &counter, work);
-	// 	applog(LOG_DEBUG, "Generated foobar work");
-	// 	stage_work(work);
-	// }
 	return 0;
 }
