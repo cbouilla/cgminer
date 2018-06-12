@@ -98,6 +98,8 @@ char *curly = ":D";
 #include <fcntl.h>
 #include <sys/wait.h>
 
+#include <err.h>
+#include <zmq.h>
 
 #include "driver-bitmain.h"
 #define USE_FPGA
@@ -315,6 +317,10 @@ struct schedtime schedstart;
 struct schedtime schedstop;
 bool sched_paused;
 
+// zmq adresses
+char *zmq_req_address;
+char *zmq_push_address;
+void *zmq_ctx;
 
 void get_datestamp(char *f, size_t fsiz, struct timeval *tv)
 {
@@ -1631,6 +1637,7 @@ static const char NIBBLE[16] = {48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 65, 66, 
 static void gen_foobar_work(int kind, int64_t *_counter, struct work *work)
 {
 	int64_t counter = *_counter;
+	work->foobar_counter = counter;
 	*_counter = counter + 1;
 
 	char buffer[80];
@@ -1655,7 +1662,6 @@ static void gen_foobar_work(int kind, int64_t *_counter, struct work *work)
 
 	calc_midstate(work);
 	work->sdiff = 2; 
-
 	local_work++;
 
 	work->nonce = 0;
@@ -1706,23 +1712,6 @@ struct work *get_work(struct thr_info *thr, const int thr_id)
 	return work;
 }
 
-/* Submit a copy of the tested, statistic recorded work item asynchronously */
-static void submit_work_async(struct work *work)
-{
-	cgtime(&work->tv_work_found);
-	
-	// applog(LOG_DEBUG, "GOT SOMETHING TO REPORT !");
-	if (opt_debug) {
-		uint32_t space[20];
-		flip80(space, work->data);
-		char *block = bin2hex((const unsigned char *) space, 80);
-		applog(LOG_DEBUG, "Solved block %s", block);
-		free(block);
-	}
-
-	nonce_reported++;
-	free_work(work);
-}
 
 void inc_hw_errors(struct thr_info *thr)
 {
@@ -1760,13 +1749,27 @@ void inc_work_stats(struct thr_info *thr, struct pool *pool, int diff1)
 
 bool submit_nonce_direct(struct thr_info *thr, struct work *work, uint32_t nonce)
 {
-	(void) thr;
-	struct work *work_out;
-	uint32_t *work_nonce = (uint32_t *)(work->data + 64 + 12);
-	*work_nonce = htole32(nonce);
+	struct nonce_msg_t msg;
+	msg.counter = work->foobar_counter;
+	msg.nonce = htole32(nonce);
+	
+	// printf("found counter = %" PRIx64 " nonce = %" PRIx32 "\n", msg.counter, msg.nonce);
 
-	work_out = copy_work(work);
-	submit_work_async(work_out);
+	if (opt_debug) {
+		uint32_t *work_nonce = (uint32_t *)(work->data + 64 + 12);
+		*work_nonce = htole32(nonce);
+
+		uint32_t space[20];
+		flip80(space, work->data);
+		char *block = bin2hex((const unsigned char *) space, 80);
+		applog(LOG_DEBUG, "Solved block %s", block);
+		free(block);
+	}
+
+	if (-1 == zmq_send(thr->cgpu->zmq_socket, &msg, sizeof(msg), 0))
+		errx(1, "zmq_send nonce %s", zmq_strerror(errno));
+
+	nonce_reported++;
 	return true;
 }
 
@@ -2395,6 +2398,7 @@ struct device_drv *copy_drv(struct device_drv *drv)
 }
 
 
+
 int main(int argc, char *argv[])
 {
 	struct sigaction handler;
@@ -2552,10 +2556,8 @@ int main(int argc, char *argv[])
 	for (i = 0; i < total_devices; ++i)
 		enable_device(devices[i]);
 
-#ifndef LOCAL
 	if (!total_devices)
 		early_quit(1, "All devices disabled, cannot mine!");
-#endif
 
 	most_devices = total_devices;
 
@@ -2569,7 +2571,15 @@ int main(int argc, char *argv[])
 		logcursor = logstart + 1;
 	}
 
-	// currentpool = pools[0];
+	// zmq preparation
+	char *server_address = "52.5.252.107";
+	int server_port = 5555;
+	zmq_req_address = malloc(strlen(server_address) + 16);
+	zmq_push_address = malloc(strlen(server_address) + 16);
+	sprintf(zmq_req_address, "tcp://%s:%d", server_address, server_port);
+	sprintf(zmq_push_address, "tcp://%s:%d", server_address, server_port + 1);
+	zmq_ctx = zmq_ctx_new();
+
 
 	mining_thr = calloc(mining_threads, sizeof(thr));
 	if (!mining_thr)
@@ -2581,7 +2591,6 @@ int main(int argc, char *argv[])
 	}
 
 	// Start threads
-#ifndef LOCAL   // for debugging purposes
 	int k = 0;
 	for (i = 0; i < total_devices; ++i) {
 		struct cgpu_info *cgpu = devices[i];
@@ -2611,11 +2620,9 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
-#endif
 
 	applog(LOG_NOTICE, "CB: no pools anymore");
 	
-
 	total_mhashes_done = 0;
 	for(i = 0; i < CG_LOCAL_MHASHES_MAX_NUM; i++) {
 		g_local_mhashes_dones[i] = 0;
@@ -2640,16 +2647,30 @@ int main(int argc, char *argv[])
 		early_quit(1, "watchdog thread create failed");
 	pthread_detach(thr->pth);
 
-	// ATTENTION, J'AI VIRE LE THREAD API
-
-	/* Just to be sure */
-	if (total_control_threads != 8)
-		early_quit(1, "incorrect total_control_threads (%d) should be 8", total_control_threads);
-
 	set_highprio();
 
 	/* Once everything is set up, main() becomes the getwork scheduler */
 	int64_t counter = 0;
+	int kind = 0;
+
+	
+	applog(LOG_NOTICE, "Establishing connection with work server %s\n", zmq_req_address);
+
+	void *socket_req = zmq_socket(zmq_ctx, ZMQ_REQ);
+	if (0 != zmq_connect(socket_req, zmq_req_address))
+		errx(1, "zmq_connect REQ : %s", zmq_strerror(errno));
+
+	if (-1 == zmq_send(socket_req, NULL, 0, 0))
+		errx(1, "zmq_send %s", zmq_strerror(errno));
+
+	struct greeting_msg_t greet;
+	if (-1 == zmq_recv(socket_req, &greet, sizeof(greet), 0))
+		errx(1, "zmq_recv %s", zmq_strerror(errno));
+	counter = greet.counter;
+	kind = greet.kind;
+
+	applog(LOG_NOTICE, "FOOBAR server tells us to work on kind %d, starting at %" PRIx64 "\n", kind, counter);
+
 
 	while (42) {
 		int ts, max_staged = max_queue;
@@ -2674,7 +2695,7 @@ int main(int argc, char *argv[])
 			discard_work(work);
 		work = make_work();
 
-		gen_foobar_work(0, &counter, work);
+		gen_foobar_work(kind, &counter, work);
 		applog(LOG_DEBUG, "Generated foobar work");
 		stage_work(work);
 	}

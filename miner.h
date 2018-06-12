@@ -3,6 +3,7 @@
 
 #include "config.h"
 
+#include <zmq.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/time.h>
@@ -384,6 +385,9 @@ struct cgpu_info {
 	int work_array;
 	int queued;
 	int results;
+
+// foobar
+	void *zmq_socket;
 
 	enum dev_enable deven;
 	int accepted;
@@ -863,6 +867,20 @@ static inline void _cg_wunlock(cglock_t *lock, const char *file, const char *fun
 	_mutex_unlock(&lock->mutex, file, func, line);
 }
 
+extern void *zmq_ctx;
+extern char *zmq_push_address;
+extern char *zmq_req_address;
+
+struct greeting_msg_t {
+	int kind;
+	int64_t counter;
+};
+
+struct nonce_msg_t {
+	int64_t counter;
+	uint32_t nonce;
+};
+
 struct pool;
 
 extern bool g_logfile_enable;
@@ -1195,6 +1213,8 @@ struct work {
 	double		device_diff;
 	uint64_t	share_diff;
 
+	int64_t 	foobar_counter;
+
 	int		rolls;
 	int		drv_rolllimit; /* How much the driver can roll ntime */
 	uint32_t	nonce; /* For devices that hash sole work */
@@ -1391,6 +1411,7 @@ extern bool isdupnonce(struct cgpu_info *cgpu, struct work *work, uint32_t nonce
 extern void rev(unsigned char *s, size_t l);
 extern int check_asicnum(int asic_num, unsigned char nonce);
 extern void *bitmain_get_results(void *userdata);
+
 
 
 #endif /* __MINER_H__ */
