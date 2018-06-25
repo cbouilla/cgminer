@@ -874,12 +874,12 @@ extern char *zmq_req_address;
 struct greeting_msg_t {
 	int kind;
 	int64_t counter;
-};
+} __attribute__((packed));
 
 struct nonce_msg_t {
 	int64_t counter;
 	uint32_t nonce;
-};
+} __attribute__((packed));
 
 struct pool;
 

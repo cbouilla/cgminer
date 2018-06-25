@@ -1265,12 +1265,8 @@ void *bitmain_get_results(void *userdata)
 	snprintf(threadname, 24, "btm_recv/%d", bitmain->device_id);
 	RenameThread(threadname);
 
-	// zmq socket must be created/used in the same thread
-	bitmain->zmq_socket = zmq_socket(zmq_ctx, ZMQ_PUSH);
-	if (0 != zmq_connect(bitmain->zmq_socket, zmq_push_address))
-		errx(1, "zmq_connect PUSH : %s", zmq_strerror(errno));
-
-
+	bitmain->zmq_socket = NULL;
+	
 	while (likely(!bitmain->shutdown)) {
 		unsigned char buf[rsize];
 

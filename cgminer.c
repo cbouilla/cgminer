@@ -1766,9 +1766,32 @@ bool submit_nonce_direct(struct thr_info *thr, struct work *work, uint32_t nonce
 		free(block);
 	}
 
-	if (-1 == zmq_send(thr->cgpu->zmq_socket, &msg, sizeof(msg), 0))
-		errx(1, "zmq_send nonce %s", zmq_strerror(errno));
+	assert(sizeof(msg) == 12);
 
+	struct cgpu_info *bitmain = thr->cgpu;
+	/* Create the zmq socket if not alreday there. It must always be created in
+	   the thread that uses it. */
+	if (bitmain->zmq_socket == NULL) {
+		bitmain->zmq_socket = zmq_socket(zmq_ctx, ZMQ_PUSH);
+		if (bitmain->zmq_socket == NULL)
+			errx(1, "zmq_socket (PUSH): %s", zmq_strerror(errno));
+		if (0 != zmq_connect(bitmain->zmq_socket, zmq_push_address))
+			errx(1, "zmq_connect PUSH : %s", zmq_strerror(errno));
+	}
+
+	/* non-blocking send ("Lazy Pirate Pattern". If sending NOW is impossible,
+	   then we probably lost the connection. Destroy the socket and-recreate it, 
+	   so that we stand a chance of restarting. */
+	if (-1 == zmq_send(bitmain->zmq_socket, &msg, sizeof(msg), ZMQ_DONTWAIT)) {
+		if (errno == EAGAIN) {
+			applog(LOG_WARNING, "Cannot PUSH block. Trying to re-connect");
+			if (0 != zmq_close(bitmain->zmq_socket))
+				errx(1, "zmq_close: %s", zmq_strerror(errno));
+			bitmain->zmq_socket = NULL;
+		} else {
+			errx(1, "zmq_send nonce %s", zmq_strerror(errno));
+		}
+	}
 	nonce_reported++;
 	return true;
 }
@@ -2407,6 +2430,8 @@ int main(int argc, char *argv[])
 	struct block *block;
 	int i;
 	char *s;
+
+	assert(sizeof(struct nonce_msg_t) == 12);
 
 	g_logfile_enable = false;
 	strcpy(g_logfile_path, "cgminer.log");
