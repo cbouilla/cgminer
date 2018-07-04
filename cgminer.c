@@ -1775,6 +1775,13 @@ bool submit_nonce_direct(struct thr_info *thr, struct work *work, uint32_t nonce
 		bitmain->zmq_socket = zmq_socket(zmq_ctx, ZMQ_PUSH);
 		if (bitmain->zmq_socket == NULL)
 			errx(1, "zmq_socket (PUSH): %s", zmq_strerror(errno));
+		
+		int heartbeat_interval = 1000; // milliseconds
+		int heartbeat_timeout = 5000; // milliseconds
+
+		zmq_setsockopt(bitmain->zmq_socket, ZMQ_HEARTBEAT_IVL, &heartbeat_interval, sizeof(heartbeat_interval));
+		zmq_setsockopt(bitmain->zmq_socket, ZMQ_HEARTBEAT_TIMEOUT, &heartbeat_timeout, sizeof(heartbeat_timeout));
+
 		if (0 != zmq_connect(bitmain->zmq_socket, zmq_push_address))
 			errx(1, "zmq_connect PUSH : %s", zmq_strerror(errno));
 	}
@@ -1784,10 +1791,10 @@ bool submit_nonce_direct(struct thr_info *thr, struct work *work, uint32_t nonce
 	   so that we stand a chance of restarting. */
 	if (-1 == zmq_send(bitmain->zmq_socket, &msg, sizeof(msg), ZMQ_DONTWAIT)) {
 		if (errno == EAGAIN) {
-			applog(LOG_WARNING, "Cannot PUSH block. Trying to re-connect");
-			if (0 != zmq_close(bitmain->zmq_socket))
-				errx(1, "zmq_close: %s", zmq_strerror(errno));
-			bitmain->zmq_socket = NULL;
+			applog(LOG_WARNING, "Cannot PUSH (blocked). Trying to re-connect");
+			// if (0 != zmq_close(bitmain->zmq_socket))
+			// 	errx(1, "zmq_close: %s", zmq_strerror(errno));
+			// bitmain->zmq_socket = NULL;
 		} else {
 			errx(1, "zmq_send nonce %s", zmq_strerror(errno));
 		}
