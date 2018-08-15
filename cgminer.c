@@ -1626,9 +1626,10 @@ void set_target(unsigned char *dest_target, double diff)
 
 
 
-static const char *PREFIXES[3] = {"FOO    / 0x0000000000000000 / Charles Bouillaguet                               ",
-		     "BAR    / 0x0000000000000000 / Claire Delaplace                                  ",
-		     "FOOBAR / 0x0000000000000000 / Pierre-Alain Fouque                               "
+static const char *PREFIXES[3] = {
+	             "FOO-0x0000000000000000                                                          ",
+		     "BAR-0x0000000000000000                                                          ",
+		     "FOOBAR-0x0000000000000000                                                       "
 		};
 
 static const char NIBBLE[16] = {48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 65, 66, 67, 68, 69, 70};
@@ -1643,7 +1644,7 @@ static void gen_foobar_work(int kind, int64_t *_counter, struct work *work)
 	char buffer[80];
 	memcpy(buffer, PREFIXES[kind], 80);
 
-	int j = 27;
+	int j = (kind == 2) ? 25 : 22;
 	while (counter > 0) {
 		int nibble = counter & 0x000f;
 		counter >>= 4;
