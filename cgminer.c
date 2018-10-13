@@ -44,9 +44,9 @@
  * 4) fill_queue -> Il devient gpu->unqueued_work
  * 5) __add_queued() -> il est ajouté à cgpu->queued_work
  * 5.1) Il est renvoyé à bitmain_fill. Là, un numéro (slot) lui est affecté. S'il y a ddéjà quelque chose, 
-           c'est que ce quelque chose est un ancien work terminé. Cans ce cas-là : 
-           	work_completed --> retire de cgpu->queued_work, et free_work() sur l'ancien work.
-           le work est envoyé au FPGA
+	   c'est que ce quelque chose est un ancien work terminé. Cans ce cas-là : 
+		work_completed --> retire de cgpu->queued_work, et free_work() sur l'ancien work.
+	   le work est envoyé au FPGA
  * 
  * 6) De retour du FPGA, on a un work_id. --> clone_queued_work_byid() renvoie une copie fraiche du work.
  *
@@ -99,7 +99,9 @@ char *curly = ":D";
 #include <sys/wait.h>
 
 #include <err.h>
-#include <zmq.h>
+#include <nanomsg/nn.h>
+#include <nanomsg/reqrep.h>
+#include <nanomsg/pipeline.h>
 
 #include "driver-bitmain.h"
 #define USE_FPGA
@@ -317,10 +319,16 @@ struct schedtime schedstart;
 struct schedtime schedstop;
 bool sched_paused;
 
-// zmq adresses
-char *zmq_req_address;
-char *zmq_push_address;
-void *zmq_ctx;
+// nanomsg adresses
+char *nn_req_address;
+char *nn_push_address;
+
+
+void nn_fatal(const char *func)
+{
+	fprintf(stderr, "%s: %s\n", func, nn_strerror(nn_errno()));
+	exit(1);
+}
 
 void get_datestamp(char *f, size_t fsiz, struct timeval *tv)
 {
@@ -1627,7 +1635,7 @@ void set_target(unsigned char *dest_target, double diff)
 
 
 static const char *PREFIXES[3] = {
-	             "FOO-0x0000000000000000                                                          ",
+		     "FOO-0x0000000000000000                                                          ",
 		     "BAR-0x0000000000000000                                                          ",
 		     "FOOBAR-0x0000000000000000                                                       "
 		};
@@ -1770,34 +1778,26 @@ bool submit_nonce_direct(struct thr_info *thr, struct work *work, uint32_t nonce
 	assert(sizeof(msg) == 12);
 
 	struct cgpu_info *bitmain = thr->cgpu;
-	/* Create the zmq socket if not alreday there. It must always be created in
+	/* Create the nanomsg socket if not alreday there. It must always be created in
 	   the thread that uses it. */
-	if (bitmain->zmq_socket == NULL) {
-		bitmain->zmq_socket = zmq_socket(zmq_ctx, ZMQ_PUSH);
-		if (bitmain->zmq_socket == NULL)
-			errx(1, "zmq_socket (PUSH): %s", zmq_strerror(errno));
-		
-		int heartbeat_interval = 1000; // milliseconds
-		int heartbeat_timeout = 5000; // milliseconds
+	if (bitmain->nn_socket < 0) {
+		bitmain->nn_socket = nn_socket(AF_SP, NN_PUSH);
+		if (bitmain->nn_socket < 0) 
+                	nn_fatal("nn_socket (PUSH)");
+        
+        	if (nn_connect(bitmain->nn_socket, nn_push_address) < 0)
+                	nn_fatal("nn_connect (PUSH)");
+               	applog(LOG_WARNING, "BITMAIN : created socket and connecting to %s", nn_push_address);
+        }
 
-		zmq_setsockopt(bitmain->zmq_socket, ZMQ_HEARTBEAT_IVL, &heartbeat_interval, sizeof(heartbeat_interval));
-		zmq_setsockopt(bitmain->zmq_socket, ZMQ_HEARTBEAT_TIMEOUT, &heartbeat_timeout, sizeof(heartbeat_timeout));
-
-		if (0 != zmq_connect(bitmain->zmq_socket, zmq_push_address))
-			errx(1, "zmq_connect PUSH : %s", zmq_strerror(errno));
-	}
-
-	/* non-blocking send ("Lazy Pirate Pattern". If sending NOW is impossible,
-	   then we probably lost the connection. Destroy the socket and-recreate it, 
-	   so that we stand a chance of restarting. */
-	if (-1 == zmq_send(bitmain->zmq_socket, &msg, sizeof(msg), ZMQ_DONTWAIT)) {
-		if (errno == EAGAIN) {
+	if (nn_send(bitmain->nn_socket, &msg, sizeof(msg), NN_DONTWAIT) < 0) {
+		if (nn_errno() == EAGAIN) {
 			applog(LOG_WARNING, "Cannot PUSH (blocked). Trying to re-connect");
 			// if (0 != zmq_close(bitmain->zmq_socket))
 			// 	errx(1, "zmq_close: %s", zmq_strerror(errno));
 			// bitmain->zmq_socket = NULL;
 		} else {
-			errx(1, "zmq_send nonce %s", zmq_strerror(errno));
+			nn_fatal("nn_send (PUSH)");
 		}
 	}
 	nonce_reported++;
@@ -2027,7 +2027,7 @@ void *miner_thread(void *userdata)
 	struct device_drv *drv = cgpu->drv;
 	char threadname[16];
 
-        snprintf(threadname, sizeof(threadname), "%d/Miner", thr_id);
+	snprintf(threadname, sizeof(threadname), "%d/Miner", thr_id);
 	RenameThread(threadname);
 
 	thread_reportout(mythr);
@@ -2604,15 +2604,14 @@ int main(int argc, char *argv[])
 		logcursor = logstart + 1;
 	}
 
-	// zmq preparation
+	// nanomsg preparation
 	char *server_address = "52.5.252.107";
 	int server_port = 5555;
-	zmq_req_address = malloc(strlen(server_address) + 16);
-	zmq_push_address = malloc(strlen(server_address) + 16);
-	sprintf(zmq_req_address, "tcp://%s:%d", server_address, server_port);
-	sprintf(zmq_push_address, "tcp://%s:%d", server_address, server_port + 1);
-	zmq_ctx = zmq_ctx_new();
-
+	nn_req_address = malloc(strlen(server_address) + 16);
+	nn_push_address = malloc(strlen(server_address) + 16);
+	sprintf(nn_req_address, "tcp://%s:%d", server_address, server_port);
+	sprintf(nn_push_address, "tcp://%s:%d", server_address, server_port + 1);
+	
 
 	mining_thr = calloc(mining_threads, sizeof(thr));
 	if (!mining_thr)
@@ -2687,23 +2686,34 @@ int main(int argc, char *argv[])
 	int kind = 0;
 
 	
-	applog(LOG_NOTICE, "Establishing connection with work server %s\n", zmq_req_address);
+	applog(LOG_NOTICE, "Establishing connection with work server %s\n", nn_req_address);
+	applog(LOG_NOTICE, "and %s\n", nn_push_address);
 
-	void *socket_req = zmq_socket(zmq_ctx, ZMQ_REQ);
-	if (0 != zmq_connect(socket_req, zmq_req_address))
-		errx(1, "zmq_connect REQ : %s", zmq_strerror(errno));
 
-	if (-1 == zmq_send(socket_req, NULL, 0, 0))
-		errx(1, "zmq_send %s", zmq_strerror(errno));
+	int sock = nn_socket(AF_SP, NN_REQ);
+	if (sock < 0)
+		nn_fatal("nn_socket (REQ)");
+	
+	int rv = nn_connect(sock, nn_req_address);
+	if (rv < 0)
+		nn_fatal("nn_connect (REQ)");
 
-	struct greeting_msg_t greet;
-	if (-1 == zmq_recv(socket_req, &greet, sizeof(greet), 0))
-		errx(1, "zmq_recv %s", zmq_strerror(errno));
-	counter = greet.counter;
-	kind = greet.kind;
+	/* say HI */
+	int bytes = nn_send(sock, NULL, 0, 0);
+	if (bytes < 0)
+		nn_fatal("nn_send (REQ)");
+
+	struct greeting_msg_t *greet_msg = NULL;
+	int nbytes = nn_recv(sock, &greet_msg, NN_MSG, 0);
+
+	if (nbytes < 0)
+		nn_fatal("nn_recv (REQ)");
+
+	counter = greet_msg->counter;
+	kind = greet_msg->kind;
+	nn_freemsg(greet_msg);
 
 	applog(LOG_NOTICE, "FOOBAR server tells us to work on kind %d, starting at %" PRIx64 "\n", kind, counter);
-
 
 	while (42) {
 		int ts, max_staged = max_queue;

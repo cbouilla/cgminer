@@ -11,9 +11,9 @@ cgminer_LDFLAGS	= $(PTHREAD_FLAGS)
 cgminer_LDADD	= $(DLOPEN_FLAGS) @LIBCURL_LIBS@ @PTHREAD_LIBS@ \
 		  @NCURSES_LIBS@ @PDCURSES_LIBS@ @WS2_LIBS@ \
 		  @MM_LIBS@ @RT_LIBS@ \
-		  @MATH_LIBS@ lib/libgnu.a ccan/libccan.a -L/usr/local -lzmq
+		  @MATH_LIBS@ lib/libgnu.a ccan/libccan.a -L/usr/local -lnanomsg
 
-cgminer_CPPFLAGS += -I$(top_builddir)/lib -I$(top_srcdir)/lib
+cgminer_CPPFLAGS += -I$(top_builddir)/lib -I$(top_srcdir)/lib -I/usr/local/include
 
 # common sources
 cgminer_SOURCES := cgminer.c

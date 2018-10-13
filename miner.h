@@ -3,7 +3,7 @@
 
 #include "config.h"
 
-#include <zmq.h>
+#include <nanomsg/nn.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/time.h>
@@ -387,7 +387,7 @@ struct cgpu_info {
 	int results;
 
 // foobar
-	void *zmq_socket;
+	int nn_socket;
 
 	enum dev_enable deven;
 	int accepted;
@@ -867,9 +867,8 @@ static inline void _cg_wunlock(cglock_t *lock, const char *file, const char *fun
 	_mutex_unlock(&lock->mutex, file, func, line);
 }
 
-extern void *zmq_ctx;
-extern char *zmq_push_address;
-extern char *zmq_req_address;
+extern char *nn_push_address;
+extern char *nn_req_address;
 
 struct greeting_msg_t {
 	int kind;

@@ -1265,7 +1265,7 @@ void *bitmain_get_results(void *userdata)
 	snprintf(threadname, 24, "btm_recv/%d", bitmain->device_id);
 	RenameThread(threadname);
 
-	bitmain->zmq_socket = NULL;
+	bitmain->nn_socket = -1;
 	
 	while (likely(!bitmain->shutdown)) {
 		unsigned char buf[rsize];
