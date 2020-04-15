@@ -2,5 +2,5 @@
 
 rm /sbin/monitorcg
 killall monitorcg
-killal cgminer
+killall cgminer
 
